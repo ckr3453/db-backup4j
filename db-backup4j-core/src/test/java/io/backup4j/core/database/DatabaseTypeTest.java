@@ -61,7 +61,7 @@ class DatabaseTypeTest {
             IllegalArgumentException.class,
             () -> DatabaseType.fromString(invalidValue)
         );
-        assertEquals("Unsupported database type: INVALID", exception.getMessage());
+        assertEquals("Unsupported database type: INVALID. Supported types: MYSQL, POSTGRESQL", exception.getMessage());
     }
 
     @Test
