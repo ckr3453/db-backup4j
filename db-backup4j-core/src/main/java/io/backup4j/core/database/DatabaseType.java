@@ -5,11 +5,11 @@ public enum DatabaseType {
     POSTGRESQL;
     
     public static DatabaseType fromString(String value) {
-        if (value == null) {
-            return null;
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("Database type cannot be null or empty");
         }
         
-        String upperValue = value.toUpperCase();
+        String upperValue = value.trim().toUpperCase();
         for (DatabaseType type : DatabaseType.values()) {
             if (type.name().equals(upperValue)) {
                 return type;
