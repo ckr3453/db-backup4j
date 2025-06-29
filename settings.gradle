@@ -1,0 +1,3 @@
+rootProject.name = 'db-backup4j'
+
+include 'db-backup4j-core'
