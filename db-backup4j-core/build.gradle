@@ -1,0 +1,14 @@
+dependencies {
+    // 순수 Java 8+ 표준 라이브러리만 사용
+}
+
+jar {
+    archiveBaseName = 'db-backup4j-core'
+    manifest {
+        attributes(
+            'Implementation-Title': 'DB Backup4J Core',
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Kyungrok Cho'
+        )
+    }
+}
