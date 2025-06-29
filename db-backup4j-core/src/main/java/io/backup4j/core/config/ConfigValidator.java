@@ -15,6 +15,11 @@ public class ConfigValidator {
     public static ValidationResult validate(BackupConfig config) {
         List<String> errors = new ArrayList<>();
         
+        if (config == null) {
+            errors.add("Configuration cannot be null");
+            return new ValidationResult(false, errors);
+        }
+        
         validateDatabase(config.getDatabase(), errors);
         validateLocalBackup(config.getLocal(), errors);
         validateEmail(config.getEmail(), errors);
@@ -31,7 +36,7 @@ public class ConfigValidator {
         }
         
         if (db.getType() == null) {
-            errors.add("Required property 'database.type' is missing or invalid. Supported types: MYSQL, POSTGRESQL");
+            errors.add("Database type is required");
         }
         
         if (isEmpty(db.getHost())) {
