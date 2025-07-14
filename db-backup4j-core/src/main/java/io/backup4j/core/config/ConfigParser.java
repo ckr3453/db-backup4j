@@ -13,34 +13,13 @@ import java.io.File;
 
 public class ConfigParser {
 
-    public static BackupConfig parseProperties(String resourcePath) throws IOException {
-        try (InputStream is = ConfigParser.class.getClassLoader().getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                throw new IOException("Configuration file not found: " + resourcePath);
-            }
-            
-            Properties props = new Properties();
-            props.load(is);
-            
-            return mapPropertiesToConfig(props);
-        }
+    private ConfigParser() {
     }
 
     public static BackupConfig parsePropertiesFromFile(String filePath) throws IOException {
         Properties props = new Properties();
         try (InputStream is = Files.newInputStream(Paths.get(filePath))) {
             props.load(is);
-            return mapPropertiesToConfig(props);
-        }
-    }
-    
-    public static BackupConfig parseYaml(String resourcePath) throws IOException {
-        try (InputStream is = ConfigParser.class.getClassLoader().getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                throw new IOException("Configuration file not found: " + resourcePath);
-            }
-            
-            Properties props = SimpleYamlParser.parseYamlToProperties(is);
             return mapPropertiesToConfig(props);
         }
     }
@@ -56,8 +35,30 @@ public class ConfigParser {
         return autoDetectAndParse(null);
     }
     
+    public static BackupConfig parseFromEnvironment() {
+        Properties props = new Properties();
+        
+        // 환경변수에서 DB_BACKUP4J_로 시작하는 모든 값을 찾아서 Properties로 변환
+        System.getenv().forEach((key, value) -> {
+            if (key.startsWith("DB_BACKUP4J_")) {
+                // DB_BACKUP4J_DATABASE_TYPE -> database.type
+                String configKey = key.substring("DB_BACKUP4J_".length())
+                    .toLowerCase()
+                    .replace("_", ".");
+                props.setProperty(configKey, value);
+            }
+        });
+        
+        return mapPropertiesToConfig(props);
+    }
+    
     public static BackupConfig autoDetectAndParse(String configLocation) throws IOException {
-        // 1. 프로젝트 루트에서 db-backup4j.properties 확인
+        // 1. 환경변수 확인 (최우선)
+        if (hasEnvironmentVariables()) {
+            return parseFromEnvironment();
+        }
+        
+        // 2. 프로젝트 루트에서 설정 파일 확인
         String[] defaultPaths = {
             "./db-backup4j.properties",
             "./db-backup4j.yaml",
@@ -71,7 +72,7 @@ public class ConfigParser {
             }
         }
         
-        // 2. annotation의 configLocation 존재여부 확인
+        // 3. configLocation 파라미터 확인
         if (configLocation != null && !configLocation.trim().isEmpty()) {
             File configFile = new File(configLocation);
             if (configFile.exists() && configFile.isFile()) {
@@ -79,12 +80,18 @@ public class ConfigParser {
             }
         }
         
-        // 3. 모든 경로에서 파일을 찾지 못한 경우
+        // 4. 모든 경로에서 파일을 찾지 못한 경우
         throw new IOException(
-            "Configuration file not found. Searched paths: "
+            "Configuration not found. Searched: environment variables, file paths: "
                 + String.join(", ", defaultPaths)
                 + (configLocation != null ? ", " + configLocation : "")
         );
+    }
+    
+    private static boolean hasEnvironmentVariables() {
+        // DB_BACKUP4J_로 시작하는 환경변수가 하나라도 있는지 확인
+        return System.getenv().keySet().stream()
+            .anyMatch(key -> key.startsWith("DB_BACKUP4J_"));
     }
     
     public static BackupConfig parseConfigFile(String filePath) throws IOException {
@@ -104,99 +111,116 @@ public class ConfigParser {
     }
 
     private static BackupConfig mapPropertiesToConfig(Properties props) {
-        BackupConfig config = new BackupConfig();
+        return BackupConfig.builder()
+            .database(mapDatabaseConfig(props))
+            .local(mapLocalBackupConfig(props))
+            .email(mapEmailConfig(props))
+            .s3(mapS3Config(props))
+            .schedule(mapScheduleConfig(props))
+            .build();
+    }
+    
+    // 테스트 목적으로만 사용 - 환경변수와 파일 설정 병합 (레거시)
+    static Properties mergeWithEnvironmentVariables(Properties fileProps) {
+        Properties mergedProps = new Properties();
         
-        config.setDatabase(mapDatabaseConfig(props));
-        config.setLocal(mapLocalBackupConfig(props));
-        config.setEmail(mapEmailConfig(props));
-        config.setS3(mapS3Config(props));
-        config.setSchedule(mapScheduleConfig(props));
+        // 1. 파일에서 읽은 설정을 먼저 추가
+        mergedProps.putAll(fileProps);
         
-        return config;
+        // 2. 환경변수에서 DB_BACKUP4J_로 시작하는 값들을 덮어쓰기
+        System.getenv().forEach((key, value) -> {
+            if (key.startsWith("DB_BACKUP4J_")) {
+                // DB_BACKUP4J_DATABASE_TYPE -> database.type
+                String configKey = key.substring("DB_BACKUP4J_".length())
+                    .toLowerCase()
+                    .replace("_", ".");
+                mergedProps.setProperty(configKey, value);
+            }
+        });
+        
+        return mergedProps;
     }
 
     private static DatabaseConfig mapDatabaseConfig(Properties props) {
-        DatabaseConfig db = new DatabaseConfig();
+        DatabaseConfig.Builder builder = DatabaseConfig.builder();
         
         String typeStr = props.getProperty("database.type");
         if (typeStr != null) {
             try {
                 DatabaseType type = DatabaseType.fromString(typeStr);
-                db.setType(type);
+                builder.type(type);
             } catch (IllegalArgumentException e) {
                 // 잘못된 타입은 null로 설정하고 나중에 validator에서 검증
-                db.setType(null);
+                builder.type(null);
             }
         }
         
-        db.setHost(props.getProperty("database.host", "localhost"));
+        builder.host(props.getProperty("database.host", ConfigDefaults.DEFAULT_DATABASE_HOST));
         
-        String portStr = props.getProperty("database.port", "3306");
+        String portStr = props.getProperty("database.port", String.valueOf(ConfigDefaults.DEFAULT_MYSQL_PORT));
         try {
-            db.setPort(Integer.parseInt(portStr));
+            builder.port(Integer.parseInt(portStr));
         } catch (NumberFormatException e) {
-            db.setPort(0); // 잘못된 포트는 0으로 설정
+            builder.port(0); // 잘못된 포트는 0으로 설정
         }
         
-        db.setName(props.getProperty("database.name"));
-        db.setUsername(props.getProperty("database.username"));
-        db.setPassword(props.getProperty("database.password"));
+        builder.name(props.getProperty("database.name"));
+        builder.username(props.getProperty("database.username"));
+        builder.password(props.getProperty("database.password"));
         
-        return db;
+        return builder.build();
     }
 
     private static LocalBackupConfig mapLocalBackupConfig(Properties props) {
-        LocalBackupConfig local = new LocalBackupConfig();
-        local.setEnabled(Boolean.parseBoolean(props.getProperty("backup.local.enabled", "true")));
-        local.setPath(props.getProperty("backup.local.path", "./db-backup4j"));
-        local.setRetention(props.getProperty("backup.local.retention", "30"));
-        local.setCompress(Boolean.parseBoolean(props.getProperty("backup.local.compress", "true")));
-        return local;
+        return LocalBackupConfig.builder()
+            .enabled(Boolean.parseBoolean(props.getProperty("backup.local.enabled", String.valueOf(ConfigDefaults.DEFAULT_LOCAL_BACKUP_ENABLED))))
+            .path(props.getProperty("backup.local.path", ConfigDefaults.DEFAULT_LOCAL_BACKUP_PATH))
+            .retention(props.getProperty("backup.local.retention", ConfigDefaults.DEFAULT_LOCAL_BACKUP_RETENTION_DAYS))
+            .compress(Boolean.parseBoolean(props.getProperty("backup.local.compress", String.valueOf(ConfigDefaults.DEFAULT_LOCAL_BACKUP_COMPRESS))))
+            .build();
     }
 
     private static EmailBackupConfig mapEmailConfig(Properties props) {
-        EmailBackupConfig email = new EmailBackupConfig();
-        email.setEnabled(Boolean.parseBoolean(props.getProperty("backup.email.enabled", "false")));
-        email.setUsername(props.getProperty("backup.email.username"));
-        email.setPassword(props.getProperty("backup.email.password"));
+        EmailBackupConfig.SmtpConfig.Builder smtpBuilder = EmailBackupConfig.SmtpConfig.builder()
+            .host(props.getProperty("backup.email.smtp.host"));
         
-        EmailBackupConfig.SmtpConfig smtp = new EmailBackupConfig.SmtpConfig();
-        smtp.setHost(props.getProperty("backup.email.smtp.host"));
-        
-        String smtpPortStr = props.getProperty("backup.email.smtp.port", "587");
+        String smtpPortStr = props.getProperty("backup.email.smtp.port", String.valueOf(ConfigDefaults.DEFAULT_SMTP_PORT));
         try {
-            smtp.setPort(Integer.parseInt(smtpPortStr));
+            smtpBuilder.port(Integer.parseInt(smtpPortStr));
         } catch (NumberFormatException e) {
-            smtp.setPort(0); // 잘못된 포트는 0으로 설정
+            smtpBuilder.port(0); // 잘못된 포트는 0으로 설정
         }
-        email.setSmtp(smtp);
+        
+        EmailBackupConfig.Builder builder = EmailBackupConfig.builder()
+            .enabled(Boolean.parseBoolean(props.getProperty("backup.email.enabled", String.valueOf(ConfigDefaults.DEFAULT_EMAIL_BACKUP_ENABLED))))
+            .username(props.getProperty("backup.email.username"))
+            .password(props.getProperty("backup.email.password"))
+            .smtp(smtpBuilder.build());
         
         String recipients = props.getProperty("backup.email.recipients");
         if (recipients != null) {
             List<String> recipientList = Arrays.asList(recipients.split(","));
-            email.setRecipients(recipientList);
+            builder.recipients(recipientList);
         }
         
-        return email;
+        return builder.build();
     }
 
     private static S3BackupConfig mapS3Config(Properties props) {
-        S3BackupConfig s3 = new S3BackupConfig();
-        s3.setEnabled(Boolean.parseBoolean(props.getProperty("backup.s3.enabled", "false")));
-        s3.setBucket(props.getProperty("backup.s3.bucket"));
-        s3.setPrefix(props.getProperty("backup.s3.prefix", "backups"));
-        s3.setRegion(props.getProperty("backup.s3.region", "us-east-1"));
-        s3.setAccessKey(props.getProperty("backup.s3.access-key"));
-        s3.setSecretKey(props.getProperty("backup.s3.secret-key"));
-        return s3;
+        return S3BackupConfig.builder()
+            .enabled(Boolean.parseBoolean(props.getProperty("backup.s3.enabled", String.valueOf(ConfigDefaults.DEFAULT_S3_BACKUP_ENABLED))))
+            .bucket(props.getProperty("backup.s3.bucket"))
+            .prefix(props.getProperty("backup.s3.prefix", ConfigDefaults.DEFAULT_S3_PREFIX))
+            .region(props.getProperty("backup.s3.region", ConfigDefaults.DEFAULT_S3_REGION))
+            .accessKey(props.getProperty("backup.s3.access-key"))
+            .secretKey(props.getProperty("backup.s3.secret-key"))
+            .build();
     }
 
     private static ScheduleConfig mapScheduleConfig(Properties props) {
-        ScheduleConfig schedule = new ScheduleConfig();
-        schedule.setEnabled(Boolean.parseBoolean(props.getProperty("schedule.enabled", "false")));
-        schedule.setDaily(props.getProperty("schedule.daily"));
-        schedule.setWeekly(props.getProperty("schedule.weekly"));
-        schedule.setMonthly(props.getProperty("schedule.monthly"));
-        return schedule;
+        return ScheduleConfig.builder()
+            .enabled(Boolean.parseBoolean(props.getProperty("schedule.enabled", String.valueOf(ConfigDefaults.DEFAULT_SCHEDULE_ENABLED))))
+            .cron(props.getProperty("schedule.cron"))
+            .build();
     }
 }
