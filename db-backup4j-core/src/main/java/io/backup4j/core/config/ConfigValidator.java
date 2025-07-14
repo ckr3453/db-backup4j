@@ -10,7 +10,6 @@ public class ConfigValidator {
         "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$"
     );
     
-    private static final Pattern HHMM_TIME_PATTERN = Pattern.compile("^([01]?[0-9]|2[0-3]):[0-5][0-9]$");
     
     public static ValidationResult validate(BackupConfig config) {
         List<String> errors = new ArrayList<>();
@@ -43,8 +42,8 @@ public class ConfigValidator {
             errors.add("Database host is required");
         }
         
-        if (db.getPort() <= 0 || db.getPort() > 65535) {
-            errors.add("Database port must be between 1 and 65535");
+        if (db.getPort() < ConfigDefaults.MIN_PORT || db.getPort() > ConfigDefaults.MAX_PORT) {
+            errors.add("Database port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT);
         }
         
         if (isEmpty(db.getName())) {
@@ -86,8 +85,8 @@ public class ConfigValidator {
                 errors.add("Required property 'backup.email.smtp.host' is missing when email is enabled");
             }
             
-            if (email.getSmtp().getPort() <= 0 || email.getSmtp().getPort() > 65535) {
-                errors.add("SMTP port must be between 1 and 65535");
+            if (email.getSmtp().getPort() < ConfigDefaults.MIN_PORT || email.getSmtp().getPort() > ConfigDefaults.MAX_PORT) {
+                errors.add("SMTP port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT);
             }
         }
         
@@ -137,25 +136,14 @@ public class ConfigValidator {
             return;
         }
         
-        boolean hasSchedule = false;
-        
-        if (!isEmpty(schedule.getDaily())) {
-            hasSchedule = true;
-            if (!HHMM_TIME_PATTERN.matcher(schedule.getDaily()).matches()) {
-                errors.add("Invalid daily schedule format: " + schedule.getDaily() + ". Use HH:MM format");
-            }
+        if (isEmpty(schedule.getCron())) {
+            errors.add("Cron expression is required when schedule is enabled");
+            return;
         }
         
-        if (!isEmpty(schedule.getWeekly())) {
-            hasSchedule = true;            
-        }
-        
-        if (!isEmpty(schedule.getMonthly())) {
-            hasSchedule = true;            
-        }
-        
-        if (!hasSchedule) {
-            errors.add("At least one schedule type (daily, weekly, or monthly) is required when scheduling is enabled");
+        CronValidator.ValidationResult cronResult = CronValidator.validate(schedule.getCron());
+        if (!cronResult.isValid()) {
+            errors.add(cronResult.getErrorMessage());
         }
     }
     
