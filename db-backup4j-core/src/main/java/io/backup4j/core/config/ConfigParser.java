@@ -18,6 +18,8 @@ public class ConfigParser {
     private ConfigParser() {
     }
 
+    private static final String ENV_KEY_PREFIX = "DB_BACKUP4J_";
+
     public static BackupConfig parsePropertiesFromFile(String filePath) throws IOException {
         Properties props = new Properties();
         try (InputStream is = Files.newInputStream(Paths.get(filePath))) {
@@ -42,9 +44,9 @@ public class ConfigParser {
         
         // 환경변수에서 DB_BACKUP4J_로 시작하는 모든 값을 찾아서 Properties로 변환
         System.getenv().forEach((key, value) -> {
-            if (key.startsWith("DB_BACKUP4J_")) {
+            if (key.startsWith(ENV_KEY_PREFIX)) {
                 // DB_BACKUP4J_DATABASE_TYPE -> database.type
-                String configKey = key.substring("DB_BACKUP4J_".length())
+                String configKey = key.substring(ENV_KEY_PREFIX.length())
                     .toLowerCase()
                     .replace("_", ".");
                 props.setProperty(configKey, value);
@@ -93,7 +95,7 @@ public class ConfigParser {
     private static boolean hasEnvironmentVariables() {
         // DB_BACKUP4J_로 시작하는 환경변수가 하나라도 있는지 확인
         return System.getenv().keySet().stream()
-            .anyMatch(key -> key.startsWith("DB_BACKUP4J_"));
+            .anyMatch(key -> key.startsWith(ENV_KEY_PREFIX));
     }
     
     public static BackupConfig parseConfigFile(String filePath) throws IOException {
@@ -131,9 +133,9 @@ public class ConfigParser {
         
         // 2. 환경변수에서 DB_BACKUP4J_로 시작하는 값들을 덮어쓰기
         System.getenv().forEach((key, value) -> {
-            if (key.startsWith("DB_BACKUP4J_")) {
+            if (key.startsWith(ENV_KEY_PREFIX)) {
                 // DB_BACKUP4J_DATABASE_TYPE -> database.type
-                String configKey = key.substring("DB_BACKUP4J_".length())
+                String configKey = key.substring(ENV_KEY_PREFIX.length())
                     .toLowerCase()
                     .replace("_", ".");
                 mergedProps.setProperty(configKey, value);
