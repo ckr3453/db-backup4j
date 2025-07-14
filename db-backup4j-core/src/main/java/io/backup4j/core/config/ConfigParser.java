@@ -1,6 +1,7 @@
 package io.backup4j.core.config;
 
 import io.backup4j.core.database.DatabaseType;
+import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.io.File;
 
@@ -26,7 +28,7 @@ public class ConfigParser {
     
     public static BackupConfig parseYamlFromFile(String filePath) throws IOException {
         try (InputStream is = Files.newInputStream(Paths.get(filePath))) {
-            Properties props = SimpleYamlParser.parseYamlToProperties(is);
+            Properties props = parseYamlToProperties(is);
             return mapPropertiesToConfig(props);
         }
     }
@@ -222,5 +224,38 @@ public class ConfigParser {
             .enabled(Boolean.parseBoolean(props.getProperty("schedule.enabled", String.valueOf(ConfigDefaults.DEFAULT_SCHEDULE_ENABLED))))
             .cron(props.getProperty("schedule.cron"))
             .build();
+    }
+    
+    private static Properties parseYamlToProperties(InputStream inputStream) throws IOException {
+        Properties properties = new Properties();
+        
+        try {
+            Yaml yaml = new Yaml();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = yaml.load(inputStream);
+            
+            if (data != null) {
+                flattenMap(data, "", properties);
+            }
+            
+        } catch (Exception e) {
+            throw new IOException("Failed to parse YAML: " + e.getMessage(), e);
+        }
+        
+        return properties;
+    }
+    
+    @SuppressWarnings("unchecked")
+    private static void flattenMap(Map<String, Object> map, String prefix, Properties properties) {
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            String key = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
+            Object value = entry.getValue();
+            
+            if (value instanceof Map) {
+                flattenMap((Map<String, Object>) value, key, properties);
+            } else if (value != null) {
+                properties.setProperty(key, value.toString());
+            }
+        }
     }
 }
