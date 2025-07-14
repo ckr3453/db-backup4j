@@ -1,5 +1,8 @@
 dependencies {
-    // 순수 Java 8+ 표준 라이브러리만 사용
+    implementation 'mysql:mysql-connector-java:8.0.33'
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'org.yaml:snakeyaml:2.0'
+    implementation 'com.cronutils:cron-utils:9.2.0'
 }
 
 jar {
