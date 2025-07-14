@@ -3,11 +3,15 @@ package io.backup4j.core;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.AfterEach;
 
 import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.nio.file.Path;
 import java.io.FileWriter;
+import java.util.logging.Logger;
+import java.util.logging.StreamHandler;
+import java.util.logging.Level;
+import java.util.logging.SimpleFormatter;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,15 +22,35 @@ class DbBackup4jInitializerTest {
 
     private Path configFile;
     private ByteArrayOutputStream outputStream;
+    private StreamHandler logHandler;
+    private Logger logger;
 
     @BeforeEach
     void setUp() {
         configFile = tempDir.resolve("test-config.properties");
         
-        // Capture console output
+        // Capture log output
         outputStream = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(outputStream));
-        System.setErr(new PrintStream(outputStream));
+        logHandler = new StreamHandler(outputStream, new SimpleFormatter());
+        logHandler.setLevel(Level.ALL);
+        
+        logger = Logger.getLogger(DbBackup4jInitializer.class.getName());
+        logger.addHandler(logHandler);
+        logger.setLevel(Level.ALL);
+        logger.setUseParentHandlers(false);
+    }
+    
+    @AfterEach
+    void tearDown() {
+        if (logHandler != null) {
+            logger.removeHandler(logHandler);
+            logHandler.close();
+        }
+    }
+    
+    private String getLogOutput() {
+        logHandler.flush();
+        return outputStream.toString();
     }
 
     @Test
@@ -56,13 +80,13 @@ class DbBackup4jInitializerTest {
         assertDoesNotThrow(() -> DbBackup4jInitializer.run(configFile.toString()));
         
         // then
-        String output = outputStream.toString();
-        assertTrue(output.contains("Starting DB Backup4j..."));
+        String output = getLogOutput();
+        assertTrue(output.contains("Starting db-backup4j..."));
         assertTrue(output.contains("Using config file: " + configFile.toString()));
         assertTrue(output.contains("Configuration validated successfully"));
         assertTrue(output.contains("Schedule disabled - running one-time backup"));
         assertTrue(output.contains("Database: MYSQL at localhost"));
-        assertTrue(output.contains("DB Backup4j started successfully"));
+        assertTrue(output.contains("db-backup4j started successfully"));
     }
 
     @Test
@@ -82,7 +106,7 @@ class DbBackup4jInitializerTest {
             "backup.s3.enabled=false\n" +
             "\n" +
             "schedule.enabled=true\n" +
-            "schedule.daily=02:00\n";
+            "schedule.cron=0 2 * * *\n";
         
         try (FileWriter writer = new FileWriter(configFile.toFile())) {
             writer.write(content);
@@ -92,10 +116,10 @@ class DbBackup4jInitializerTest {
         assertDoesNotThrow(() -> DbBackup4jInitializer.run(configFile.toString()));
         
         // then
-        String output = outputStream.toString();
+        String output = getLogOutput();
         assertTrue(output.contains("Schedule enabled - starting scheduler"));
-        assertTrue(output.contains("Starting backup scheduler..."));
-        assertTrue(output.contains("Daily schedule: 02:00"));
+        assertTrue(output.contains("Starting db-backup4j scheduler..."));
+        assertTrue(output.contains("Cron schedule: 0 2 * * *"));
         assertTrue(output.contains("Scheduler started successfully"));
     }
 
@@ -126,7 +150,7 @@ class DbBackup4jInitializerTest {
         
         assertEquals("Backup execution failed", exception.getMessage());
         
-        String output = outputStream.toString();
+        String output = getLogOutput();
         assertTrue(output.contains("Configuration validation failed:"));
         assertTrue(output.contains("Database host is required"));
     }
@@ -142,7 +166,7 @@ class DbBackup4jInitializerTest {
         
         assertEquals("Backup execution failed", exception.getMessage());
         
-        String output = outputStream.toString();
+        String output = getLogOutput();
         assertTrue(output.contains("Backup failed:"));
     }
 }
