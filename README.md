@@ -8,11 +8,11 @@
 
 ## ✨ 주요 특징
 
-- **순수 Java**: JDK 8+ 표준 라이브러리만 사용, 외부 의존성 없음
+- **JDK version**: JDK 8+
 - **설정 파일 기반**: Properties/YAML 파일로 모든 설정 관리
 - **다중 DB 지원**: MySQL, PostgreSQL 지원 
 - **다중 저장소**: 로컬 파일, 이메일, AWS S3 백업 지원
-- **자동 스케줄링**: 일/주/월 단위 백업 스케줄링
+- **자동 스케줄링**: cron식 기반 백업 스케줄링
 - **프레임워크 독립적**: Spring Boot, 일반 Java 애플리케이션 모두 지원
 - **한 줄 실행**: `DbBackup4jInitializer.run()` 한 줄로 모든 기능 사용
 
