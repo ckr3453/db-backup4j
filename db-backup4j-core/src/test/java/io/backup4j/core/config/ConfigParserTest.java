@@ -164,6 +164,6 @@ class ConfigParserTest {
         // when & then
         IOException exception = assertThrows(IOException.class, 
             ConfigParser::autoDetectAndParse);
-        assertTrue(exception.getMessage().contains("Configuration file not found"));
+        assertTrue(exception.getMessage().contains("Configuration not found"));
     }
 }
