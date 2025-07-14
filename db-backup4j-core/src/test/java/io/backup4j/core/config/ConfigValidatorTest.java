@@ -23,8 +23,13 @@ class ConfigValidatorTest {
     @Test
     void validate_데이터베이스설정null로_예외발생() {
         // given
-        BackupConfig config = new BackupConfig();
-        config.setDatabase(null);
+        BackupConfig config = BackupConfig.builder()
+            .database(null)
+            .local(LocalBackupConfig.builder().build())
+            .email(EmailBackupConfig.builder().build())
+            .s3(S3BackupConfig.builder().build())
+            .schedule(ScheduleConfig.builder().build())
+            .build();
         
         // when
         ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
@@ -37,8 +42,20 @@ class ConfigValidatorTest {
     @Test
     void validate_데이터베이스호스트비어있음으로_예외발생() {
         // given
-        BackupConfig config = createValidConfig();
-        config.getDatabase().setHost("");
+        BackupConfig config = BackupConfig.builder()
+            .database(DatabaseConfig.builder()
+                .type(DatabaseType.MYSQL)
+                .host("")  // Empty host
+                .port(3306)
+                .name("testdb")
+                .username("user")
+                .password("pass")
+                .build())
+            .local(LocalBackupConfig.builder().enabled(false).build())
+            .email(EmailBackupConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
+            .schedule(ScheduleConfig.builder().enabled(false).build())
+            .build();
         
         // when
         ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
@@ -51,15 +68,27 @@ class ConfigValidatorTest {
     @Test
     void validate_데이터베이스포트범위초과로_예외발생() {
         // given
-        BackupConfig config = createValidConfig();
-        config.getDatabase().setPort(0);
+        BackupConfig config = BackupConfig.builder()
+            .database(DatabaseConfig.builder()
+                .type(DatabaseType.MYSQL)
+                .host("localhost")
+                .port(0)  // Invalid port
+                .name("testdb")
+                .username("user")
+                .password("pass")
+                .build())
+            .local(LocalBackupConfig.builder().enabled(false).build())
+            .email(EmailBackupConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
+            .schedule(ScheduleConfig.builder().enabled(false).build())
+            .build();
         
         // when
         ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
         
         // then
         assertFalse(result.isValid());
-        assertTrue(result.getErrors().contains("Database port must be between 1 and 65535"));
+        assertTrue(result.getErrors().contains("Database port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT));
     }
 
     @Test
@@ -76,35 +105,27 @@ class ConfigValidatorTest {
     }
 
     private BackupConfig createValidConfig() {
-        BackupConfig config = new BackupConfig();
-        
-        // Database config
-        DatabaseConfig database = new DatabaseConfig();
-        database.setType(DatabaseType.MYSQL);
-        database.setHost("localhost");
-        database.setPort(3306);
-        database.setName("testdb");
-        database.setUsername("user");
-        database.setPassword("pass");
-        config.setDatabase(database);
-        
-        // Other configs (not enabled, so minimal setup)
-        LocalBackupConfig local = new LocalBackupConfig();
-        local.setEnabled(false);
-        config.setLocal(local);
-        
-        EmailBackupConfig email = new EmailBackupConfig();
-        email.setEnabled(false);
-        config.setEmail(email);
-        
-        S3BackupConfig s3 = new S3BackupConfig();
-        s3.setEnabled(false);
-        config.setS3(s3);
-        
-        ScheduleConfig schedule = new ScheduleConfig();
-        schedule.setEnabled(false);
-        config.setSchedule(schedule);
-        
-        return config;
+        return BackupConfig.builder()
+            .database(DatabaseConfig.builder()
+                .type(DatabaseType.MYSQL)
+                .host("localhost")
+                .port(3306)
+                .name("testdb")
+                .username("user")
+                .password("pass")
+                .build())
+            .local(LocalBackupConfig.builder()
+                .enabled(false)
+                .build())
+            .email(EmailBackupConfig.builder()
+                .enabled(false)
+                .build())
+            .s3(S3BackupConfig.builder()
+                .enabled(false)
+                .build())
+            .schedule(ScheduleConfig.builder()
+                .enabled(false)
+                .build())
+            .build();
     }
 }
