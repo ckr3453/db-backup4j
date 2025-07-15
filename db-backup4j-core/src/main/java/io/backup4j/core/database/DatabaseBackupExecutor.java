@@ -106,7 +106,7 @@ public class DatabaseBackupExecutor {
         backupTableStructure(connection, writer, tableName, dbType);
         
         // 테이블 데이터 백업
-        backupTableData(connection, writer, tableName);
+        backupTableData(connection, writer, tableName, dbType);
         
         writer.write("\n");
     }
@@ -126,13 +126,11 @@ public class DatabaseBackupExecutor {
         } else if (dbType == DatabaseType.POSTGRESQL) {
             // PostgreSQL의 경우 정보 스키마를 이용한 CREATE TABLE 구문 생성
             writer.write("DROP TABLE IF EXISTS \"" + tableName + "\";\n");
-            writer.write("-- Table structure for " + tableName + " (PostgreSQL)\n");
-            // 간단한 구현을 위해 기본 구조만 생성
-            writer.write("-- TODO: Implement PostgreSQL table structure backup\n\n");
+            generatePostgreSQLCreateTable(connection, writer, tableName);
         }
     }
     
-    private void backupTableData(Connection connection, BufferedWriter writer, String tableName) 
+    private void backupTableData(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
             throws SQLException, IOException {
         
         try (Statement stmt = connection.createStatement();
@@ -143,7 +141,11 @@ public class DatabaseBackupExecutor {
             
             while (rs.next()) {
                 StringBuilder insertSQL = new StringBuilder();
-                insertSQL.append("INSERT INTO `").append(tableName).append("` VALUES (");
+                if (dbType == DatabaseType.MYSQL) {
+                    insertSQL.append("INSERT INTO `").append(tableName).append("` VALUES (");
+                } else {
+                    insertSQL.append("INSERT INTO \"").append(tableName).append("\" VALUES (");
+                }
                 
                 for (int i = 1; i <= columnCount; i++) {
                     if (i > 1) insertSQL.append(", ");
@@ -162,5 +164,87 @@ public class DatabaseBackupExecutor {
                 writer.write(insertSQL.toString());
             }
         }
+    }
+    
+    private void generatePostgreSQLCreateTable(Connection connection, BufferedWriter writer, String tableName) 
+            throws SQLException, IOException {
+        
+        StringBuilder createTable = new StringBuilder();
+        createTable.append("CREATE TABLE \"").append(tableName).append("\" (\n");
+        
+        // 컬럼 정보 조회
+        String columnQuery = "SELECT column_name, data_type, character_maximum_length, " +
+            "is_nullable, column_default " +
+            "FROM information_schema.columns " +
+            "WHERE table_name = ? AND table_schema = 'public' " +
+            "ORDER BY ordinal_position";
+            
+        try (PreparedStatement stmt = connection.prepareStatement(columnQuery)) {
+            stmt.setString(1, tableName);
+            ResultSet rs = stmt.executeQuery();
+            
+            boolean first = true;
+            while (rs.next()) {
+                if (!first) {
+                    createTable.append(",\n");
+                }
+                first = false;
+                
+                String columnName = rs.getString("column_name");
+                String dataType = rs.getString("data_type");
+                Integer maxLength = rs.getInt("character_maximum_length");
+                String isNullable = rs.getString("is_nullable");
+                String columnDefault = rs.getString("column_default");
+                
+                createTable.append("  \"").append(columnName).append("\" ");
+                
+                // 데이터 타입 처리
+                if ("character varying".equals(dataType) && maxLength != null && maxLength > 0) {
+                    createTable.append("VARCHAR(").append(maxLength).append(")");
+                } else if ("character".equals(dataType) && maxLength != null && maxLength > 0) {
+                    createTable.append("CHAR(").append(maxLength).append(")");
+                } else {
+                    createTable.append(dataType.toUpperCase());
+                }
+                
+                // NULL 제약 조건
+                if ("NO".equals(isNullable)) {
+                    createTable.append(" NOT NULL");
+                }
+                
+                // 기본값
+                if (columnDefault != null && !columnDefault.trim().isEmpty()) {
+                    createTable.append(" DEFAULT ").append(columnDefault);
+                }
+            }
+        }
+        
+        // 기본 키 정보 조회
+        String pkQuery = "SELECT a.attname " +
+            "FROM pg_index i " +
+            "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) " +
+            "WHERE i.indrelid = ?::regclass AND i.indisprimary";
+            
+        try (PreparedStatement stmt = connection.prepareStatement(pkQuery)) {
+            stmt.setString(1, tableName);
+            ResultSet rs = stmt.executeQuery();
+            
+            StringBuilder pkColumns = new StringBuilder();
+            while (rs.next()) {
+                if (pkColumns.length() > 0) {
+                    pkColumns.append(", ");
+                }
+                pkColumns.append("\"").append(rs.getString("attname")).append("\"");
+            }
+            
+            if (pkColumns.length() > 0) {
+                createTable.append(",\n  PRIMARY KEY (").append(pkColumns).append(")");
+            }
+        } catch (SQLException e) {
+            // 기본 키 조회 실패시 무시하고 계속 진행
+        }
+        
+        createTable.append("\n);\n\n");
+        writer.write(createTable.toString());
     }
 }
