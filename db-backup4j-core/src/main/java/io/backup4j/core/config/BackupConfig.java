@@ -1,16 +1,20 @@
 package io.backup4j.core.config;
 
+/**
+ * 데이터베이스 백업 전체 설정을 관리하는 최상위 설정 클래스입니다.
+ * 데이터베이스 연결, 로컬 백업, 알림 설정, S3 백업, 스케줄 설정을 포함합니다.
+ */
 public class BackupConfig {
     private final DatabaseConfig database;
     private final LocalBackupConfig local;
-    private final EmailBackupConfig email;
+    private final NotificationConfig notification;
     private final S3BackupConfig s3;
     private final ScheduleConfig schedule;
 
     private BackupConfig(Builder builder) {
         this.database = builder.database;
         this.local = builder.local;
-        this.email = builder.email;
+        this.notification = builder.notification;
         this.s3 = builder.s3;
         this.schedule = builder.schedule;
     }
@@ -27,8 +31,8 @@ public class BackupConfig {
         return local;
     }
 
-    public EmailBackupConfig getEmail() {
-        return email;
+    public NotificationConfig getNotification() {
+        return notification;
     }
 
     public S3BackupConfig getS3() {
@@ -42,7 +46,7 @@ public class BackupConfig {
     public static class Builder {
         private DatabaseConfig database;
         private LocalBackupConfig local;
-        private EmailBackupConfig email;
+        private NotificationConfig notification;
         private S3BackupConfig s3;
         private ScheduleConfig schedule;
 
@@ -56,8 +60,8 @@ public class BackupConfig {
             return this;
         }
 
-        public Builder email(EmailBackupConfig email) {
-            this.email = email;
+        public Builder notification(NotificationConfig notification) {
+            this.notification = notification;
             return this;
         }
 
