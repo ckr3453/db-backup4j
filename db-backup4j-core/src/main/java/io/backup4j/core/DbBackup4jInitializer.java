@@ -4,18 +4,32 @@ import io.backup4j.core.database.DatabaseBackupExecutor;
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.ConfigParser;
 import io.backup4j.core.config.ConfigValidator;
+import io.backup4j.core.scheduler.SimpleBackupScheduler;
 
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
+/**
+ * db-backup4j 라이브러리의 메인 진입점
+ * 설정 파일을 자동으로 감지하고 백업을 실행하는 통합 초기화 클래스입니다.
+ */
 public class DbBackup4jInitializer {
     
     private static final Logger logger = Logger.getLogger(DbBackup4jInitializer.class.getName());
+    private static SimpleBackupScheduler scheduler;
     
+    /**
+     * 기본 설정 파일을 자동으로 감지하여 백업을 실행합니다.
+     */
     public static void run() {
         run(null);
     }
     
+    /**
+     * 지정된 설정 파일로 백업을 실행합니다.
+     * 
+     * @param configPath 설정 파일 경로 (null인 경우 자동 감지)
+     */
     public static void run(String configPath) {
         try {
             logger.info("Starting db-backup4j...");
@@ -59,22 +73,23 @@ public class DbBackup4jInitializer {
         }
     }
 
+    /**
+     * 일회성 백업을 실행합니다.
+     * 
+     * @param config 백업 설정
+     */
     private static void executeBackup(BackupConfig config) {
         logger.info("Executing database backup...");
         
         try {
             logger.log(Level.INFO, "Database: {0} at {1}", new Object[]{config.getDatabase().getType(), config.getDatabase().getHost()});
             logger.log(Level.INFO, "Local backup enabled: {0}", config.getLocal().isEnabled());
-            logger.log(Level.INFO, "Email backup enabled: {0}", config.getEmail().isEnabled());
+            logger.log(Level.INFO, "Notification enabled: {0}", config.getNotification().isEnabled());
             logger.log(Level.INFO, "S3 backup enabled: {0}", config.getS3().isEnabled());
             
             // 실제 백업 실행
-            if (isTestEnvironment()) {
-                logger.info("Test environment detected - skipping actual backup execution");
-            } else {
-                DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
-                executor.executeBackup(config);
-            }
+            DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
+            executor.executeBackup(config);
             
             logger.info("Database backup completed successfully");
             
@@ -84,21 +99,38 @@ public class DbBackup4jInitializer {
         }
     }
     
+    /**
+     * 스케줄러를 시작하여 주기적인 백업을 실행합니다.
+     * 
+     * @param config 백업 설정
+     */
     private static void startScheduler(BackupConfig config) {
         logger.info("Starting db-backup4j scheduler...");
         logger.log(Level.INFO, "Cron schedule: {0}", config.getSchedule().getCron());
         
-        // TODO: 실제 스케줄러 구현
-        logger.info("Scheduler started successfully (placeholder)");
-    }
-    
-    private static boolean isTestEnvironment() {
-        // JUnit 테스트 환경인지 확인
         try {
-            Class.forName("org.junit.jupiter.api.Test");
-            return true;
-        } catch (ClassNotFoundException e) {
-            return false;
+            scheduler = new SimpleBackupScheduler(config);
+            scheduler.start();
+            
+            // JVM 종료 시 스케줄러 정리
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (scheduler != null && scheduler.isRunning()) {
+                    logger.info("Shutting down scheduler...");
+                    scheduler.stop();
+                }
+            }));
+            
+            logger.info("Scheduler started successfully");
+            
+            // 스케줄러가 실행 중일 때 메인 스레드가 종료되지 않도록 대기
+            while (scheduler.isRunning()) {
+                Thread.sleep(1000);
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to start scheduler: {0}", e.getMessage());
+            throw new RuntimeException("Scheduler start failed", e);
         }
     }
+    
 }
