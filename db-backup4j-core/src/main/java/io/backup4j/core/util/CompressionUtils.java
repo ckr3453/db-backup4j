@@ -7,7 +7,8 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * 백업 파일 압축/해제 유틸리티
+ * 백업 파일 압축/해제 유틸리티 클래스
+ * GZIP 형식으로 파일을 압축하고 해제하는 기능을 제공합니다.
  */
 public class CompressionUtils {
     
