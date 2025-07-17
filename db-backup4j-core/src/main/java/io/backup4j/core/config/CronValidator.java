@@ -7,6 +7,10 @@ import com.cronutils.parser.CronParser;
 
 import java.util.logging.Logger;
 
+/**
+ * Cron 표현식의 유효성을 검증하는 클래스입니다.
+ * Unix 형식의 5필드 cron 표현식을 지원합니다.
+ */
 public class CronValidator {
     private CronValidator() {
     }

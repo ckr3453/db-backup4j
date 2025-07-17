@@ -2,6 +2,10 @@ package io.backup4j.core.config;
 
 import io.backup4j.core.database.DatabaseType;
 
+/**
+ * 데이터베이스 연결 설정을 관리하는 클래스
+ * 데이터베이스 타입, 호스트, 포트, 사용자 정보 등을 포함함
+ */
 public class DatabaseConfig {
     private final DatabaseType type;
     private final String host;

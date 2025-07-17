@@ -2,6 +2,10 @@ package io.backup4j.core.config;
 
 import java.util.List;
 
+/**
+ * 이메일을 통한 백업 설정을 관리하는 클래스입니다.
+ * SMTP 서버 정보, 인증 정보, 수신자 목록 등을 설정합니다.
+ */
 public class EmailBackupConfig {
     private final boolean enabled;
     private final SmtpConfig smtp;
@@ -78,6 +82,9 @@ public class EmailBackupConfig {
         }
     }
 
+    /**
+     * SMTP 서버 연결 정보를 담는 내부 클래스입니다.
+     */
     public static class SmtpConfig {
         private final String host;
         private final int port;

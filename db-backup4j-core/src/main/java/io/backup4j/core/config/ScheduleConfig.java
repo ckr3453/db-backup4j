@@ -1,5 +1,9 @@
 package io.backup4j.core.config;
 
+/**
+ * 백업 스케줄링 설정을 관리하는 클래스입니다.
+ * 주기적인 백업 실행을 위한 cron 표현식을 설정합니다.
+ */
 public class ScheduleConfig {
     private final boolean enabled;
     private final String cron;
