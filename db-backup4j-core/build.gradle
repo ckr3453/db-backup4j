@@ -3,7 +3,7 @@ dependencies {
     implementation 'org.postgresql:postgresql:42.7.3'
     implementation 'org.yaml:snakeyaml:2.0'
     implementation 'com.cronutils:cron-utils:9.2.0'
-    implementation 'com.zaxxer:HikariCP:5.0.1'
+    implementation 'com.zaxxer:HikariCP:4.0.3'
     
     testImplementation 'org.mockito:mockito-inline:4.11.0'
     testImplementation 'org.testcontainers:testcontainers:1.19.0'
