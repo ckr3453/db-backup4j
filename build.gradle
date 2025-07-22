@@ -30,6 +30,14 @@ subprojects {
         testLogging {
             events "passed", "skipped", "failed"
         }
+        
+        // Java 21+ 호환성을 위한 JVM 인수 추가
+        jvmArgs += [
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED", 
+            "--add-opens=java.base/java.time=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED"
+        ]
     }
     
     
