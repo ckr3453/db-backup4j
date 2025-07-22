@@ -264,7 +264,7 @@ public class ConfigValidator {
             java.net.URL urlObj = new java.net.URL(url);
             String protocol = urlObj.getProtocol();
             return "http".equals(protocol) || "https".equals(protocol);
-        } catch (Exception e) {
+        } catch (java.net.MalformedURLException e) {
             return false;
         }
     }

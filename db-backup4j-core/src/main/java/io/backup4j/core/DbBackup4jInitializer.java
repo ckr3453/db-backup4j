@@ -5,6 +5,7 @@ import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.ConfigParser;
 import io.backup4j.core.config.ConfigValidator;
 import io.backup4j.core.scheduler.SimpleBackupScheduler;
+import io.backup4j.core.exception.SchedulerStartException;
 
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -127,8 +128,11 @@ public class DbBackup4jInitializer {
                 Thread.sleep(1000);
             }
             
-        } catch (Exception e) {
+        } catch (SchedulerStartException e) {
             logger.log(Level.SEVERE, "Failed to start scheduler: {0}", e.getMessage());
+            throw new RuntimeException("Scheduler start failed", e);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Unexpected error during scheduler start: {0}", e.getMessage());
             throw new RuntimeException("Scheduler start failed", e);
         }
     }

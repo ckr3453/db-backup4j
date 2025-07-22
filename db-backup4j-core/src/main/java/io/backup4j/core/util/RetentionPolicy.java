@@ -1,6 +1,5 @@
 package io.backup4j.core.util;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -127,7 +127,7 @@ public class RetentionPolicy {
             try (Stream<Path> files = Files.walk(backupDirectory, 1)) {
                 List<Path> backupFiles = files
                     .filter(Files::isRegularFile)
-                    .filter(path -> isBackupFile(path))
+                    .filter(RetentionPolicy::isBackupFile)
                     .collect(Collectors.toList());
                 
                 totalFiles = backupFiles.size();
@@ -227,7 +227,7 @@ public class RetentionPolicy {
                         return null;
                     }
                 })
-                .filter(info -> info != null)
+                .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(BackupFileInfo::getCreationTime).reversed())
                 .collect(Collectors.toList());
                 

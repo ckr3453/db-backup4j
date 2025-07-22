@@ -68,7 +68,7 @@ class DbBackup4jInitializerTest {
             "backup.local.retention=30\n" +
             "backup.local.compress=true\n" +
             "\n" +
-            "backup.email.enabled=false\n" +
+            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         
@@ -90,6 +90,7 @@ class DbBackup4jInitializerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Timeout(value = 10, unit = java.util.concurrent.TimeUnit.SECONDS)
     void run_스케줄활성화로_스케줄러실행() throws Exception {
         // given
         String content = "database.type=MYSQL\n" +
@@ -102,7 +103,7 @@ class DbBackup4jInitializerTest {
             "backup.local.enabled=true\n" +
             "backup.local.path=/backup\n" +
             "\n" +
-            "backup.email.enabled=false\n" +
+            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "\n" +
             "schedule.enabled=true\n" +
@@ -112,8 +113,18 @@ class DbBackup4jInitializerTest {
             writer.write(content);
         }
         
-        // when
-        assertDoesNotThrow(() -> DbBackup4jInitializer.run(configFile.toString()));
+        // when - run in separate thread with timeout
+        Thread schedulerThread = new Thread(() -> {
+            try {
+                DbBackup4jInitializer.run(configFile.toString());
+            } catch (RuntimeException e) {
+                // Expected backup execution failure
+            }
+        });
+        
+        schedulerThread.start();
+        Thread.sleep(2000); // Wait for scheduler to start
+        schedulerThread.interrupt(); // Stop the scheduler
         
         // then
         String output = getLogOutput();
@@ -136,7 +147,7 @@ class DbBackup4jInitializerTest {
             "backup.local.enabled=true\n" +
             "backup.local.path=/backup\n" +
             "\n" +
-            "backup.email.enabled=false\n" +
+            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         

@@ -26,7 +26,7 @@ class ConfigValidatorTest {
         BackupConfig config = BackupConfig.builder()
             .database(null)
             .local(LocalBackupConfig.builder().build())
-            .email(EmailBackupConfig.builder().build())
+            .notification(NotificationConfig.builder().build())
             .s3(S3BackupConfig.builder().build())
             .schedule(ScheduleConfig.builder().build())
             .build();
@@ -52,7 +52,7 @@ class ConfigValidatorTest {
                 .password("pass")
                 .build())
             .local(LocalBackupConfig.builder().enabled(false).build())
-            .email(EmailBackupConfig.builder().enabled(false).build())
+            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .schedule(ScheduleConfig.builder().enabled(false).build())
             .build();
@@ -78,7 +78,7 @@ class ConfigValidatorTest {
                 .password("pass")
                 .build())
             .local(LocalBackupConfig.builder().enabled(false).build())
-            .email(EmailBackupConfig.builder().enabled(false).build())
+            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .schedule(ScheduleConfig.builder().enabled(false).build())
             .build();
@@ -117,7 +117,7 @@ class ConfigValidatorTest {
             .local(LocalBackupConfig.builder()
                 .enabled(false)
                 .build())
-            .email(EmailBackupConfig.builder()
+            .notification(NotificationConfig.builder()
                 .enabled(false)
                 .build())
             .s3(S3BackupConfig.builder()

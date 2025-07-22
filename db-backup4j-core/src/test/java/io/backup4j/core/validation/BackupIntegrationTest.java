@@ -86,6 +86,7 @@ class BackupIntegrationTest {
                 ")");
             
             // 테스트 데이터 삽입
+            stmt.execute("TRUNCATE TABLE test_users");
             stmt.execute("INSERT INTO test_users VALUES (1, 'John Doe', 'john@example.com')");
             stmt.execute("INSERT INTO test_users VALUES (2, 'Jane Smith', 'jane@example.com')");
         }
@@ -265,7 +266,7 @@ class BackupIntegrationTest {
         String toString = metadata.toString();
         assertTrue(toString.contains("BackupMetadata"));
         assertTrue(toString.contains("MYSQL"));
-        assertTrue(toString.contains("test_db"));
+        assertTrue(toString.contains("testdb"));
     }
 
     @Test

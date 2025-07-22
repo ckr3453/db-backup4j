@@ -82,7 +82,7 @@ public class ZeroCopyChecksumCalculator {
                     if (position % (chunkSize * 8) == 0) {
                         long processedMB = position / (1024 * 1024);
                         long totalMB = fileSize / (1024 * 1024);
-                        logger.fine(String.format("체크섬 계산 진행률: %d MB / %d MB (%.1f%%)", 
+                        logger.fine(String.format("Checksum calculation progress: %d MB / %d MB (%.1f%%)", 
                             processedMB, totalMB, (double) position / fileSize * 100));
                     }
                 }

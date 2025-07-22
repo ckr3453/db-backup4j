@@ -2,6 +2,8 @@ package io.backup4j.core.notification;
 
 import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.validation.BackupResult;
+import io.backup4j.core.exception.WebhookNotificationException;
+import io.backup4j.core.util.Constants;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -34,10 +36,10 @@ public class WebhookNotifier {
             throw new IllegalArgumentException("웹훅 URL이 설정되지 않았습니다.");
         }
         
-        logger.info("웹훅 알림 전송 시작: " + config.getUrl());
+        logger.info("Webhook notification sending started: " + config.getUrl());
         
         WebhookChannel channel = config.getEffectiveChannel();
-        logger.info("감지된 웹훅 채널: " + channel.getName());
+        logger.info("Detected webhook channel: " + channel.getName());
         
         // 페이로드 생성
         String payload = createPayload(title, message, result, config, channel);
@@ -49,17 +51,17 @@ public class WebhookNotifier {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 sendHttpRequest(config.getUrl(), payload, config, channel);
-                logger.info("웹훅 알림 전송 완료 (시도 " + attempt + "/" + maxRetries + ")");
+                logger.info("Webhook notification sending completed (attempt " + attempt + "/" + maxRetries + ")");
                 return;
                 
             } catch (Exception e) {
                 lastException = e;
-                logger.warning("웹훅 전송 실패 (시도 " + attempt + "/" + maxRetries + "): " + e.getMessage());
+                logger.warning("Webhook sending failed (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage());
                 
                 if (attempt < maxRetries) {
                     // 재시도 전 대기 (지수 백오프)
                     try {
-                        Thread.sleep(1000 * attempt);
+                        Thread.sleep(Constants.DEFAULT_WEBHOOK_RETRY_DELAY_MS * attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new Exception("웹훅 전송 중 인터럽트 발생", ie);
@@ -113,7 +115,7 @@ public class WebhookNotifier {
             // 연결 설정
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", channel.getContentType());
-            connection.setRequestProperty("User-Agent", "db-backup4j/1.0");
+            connection.setRequestProperty("User-Agent", Constants.USER_AGENT);
             connection.setConnectTimeout(config.getTimeout() * 1000);
             connection.setReadTimeout(config.getTimeout() * 1000);
             connection.setDoOutput(true);
@@ -135,7 +137,7 @@ public class WebhookNotifier {
             int responseCode = connection.getResponseCode();
             String responseMessage = connection.getResponseMessage();
             
-            logger.info("웹훅 응답: " + responseCode + " " + responseMessage);
+            logger.info("Webhook response: " + responseCode + " " + responseMessage);
             
             if (responseCode < 200 || responseCode >= 300) {
                 String errorBody = readErrorResponse(connection);
@@ -146,9 +148,13 @@ public class WebhookNotifier {
             // 성공 응답 로깅
             String successBody = readSuccessResponse(connection);
             if (successBody != null && !successBody.trim().isEmpty()) {
-                logger.info("웹훅 응답 본문: " + successBody);
+                logger.info("Webhook response body: " + successBody);
             }
             
+        } catch (WebhookNotificationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new WebhookNotificationException("Failed to send webhook request", e);
         } finally {
             connection.disconnect();
         }
@@ -171,7 +177,7 @@ public class WebhookNotifier {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     response.append(line);
-                    if (response.length() > 1000) { // 응답 크기 제한
+                    if (response.length() > Constants.MAX_ERROR_RESPONSE_SIZE) { // 응답 크기 제한
                         response.append("...");
                         break;
                     }
@@ -179,7 +185,7 @@ public class WebhookNotifier {
                 return response.toString();
             }
         } catch (Exception e) {
-            logger.warning("오류 응답 읽기 실패: " + e.getMessage());
+            logger.warning("Failed to read error response: " + e.getMessage());
             return null;
         }
     }
@@ -201,7 +207,7 @@ public class WebhookNotifier {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     response.append(line);
-                    if (response.length() > 500) { // 응답 크기 제한
+                    if (response.length() > Constants.MAX_SUCCESS_RESPONSE_SIZE) { // 응답 크기 제한
                         response.append("...");
                         break;
                     }
@@ -209,7 +215,7 @@ public class WebhookNotifier {
                 return response.toString();
             }
         } catch (Exception e) {
-            logger.warning("성공 응답 읽기 실패: " + e.getMessage());
+            logger.warning("Failed to read success response: " + e.getMessage());
             return null;
         }
     }
@@ -229,17 +235,9 @@ public class WebhookNotifier {
             return true;
             
         } catch (Exception e) {
-            logger.warning("웹훅 연결 테스트 실패: " + e.getMessage());
+            logger.warning("Webhook connection test failed: " + e.getMessage());
             return false;
         }
     }
     
-    /**
-     * 지원되는 웹훅 채널 목록을 반환합니다
-     * 
-     * @return 지원되는 채널 배열
-     */
-    public static WebhookChannel[] getSupportedChannels() {
-        return WebhookChannel.values();
-    }
 }

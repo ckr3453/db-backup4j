@@ -3,6 +3,9 @@ package io.backup4j.core.database;
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.DatabaseConfig;
 import io.backup4j.core.config.LocalBackupConfig;
+import io.backup4j.core.config.NotificationConfig;
+import io.backup4j.core.config.S3BackupConfig;
+import io.backup4j.core.validation.BackupResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -69,6 +72,8 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
         // 테스트 데이터 생성
@@ -115,6 +120,8 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
         // 테스트 데이터 생성
@@ -159,6 +166,8 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
         // 특수 데이터 생성
@@ -201,6 +210,8 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
         setupMySQLTestData(databaseConfig);
@@ -239,12 +250,21 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
-        // when & then
-        assertThrows(SQLException.class, () -> {
-            executor.executeBackup(config);
-        });
+        // when
+        BackupResult result = executor.executeBackup(config);
+        
+        // then
+        assertNotNull(result);
+        assertEquals(BackupResult.Status.FAILED, result.getStatus());
+        assertFalse(result.getErrors().isEmpty());
+        assertTrue(result.getErrors().stream()
+            .anyMatch(error -> error.getMessage().toLowerCase().contains("connection") ||
+                              error.getMessage().toLowerCase().contains("database") ||
+                              error.getMessage().toLowerCase().contains("host")));
     }
 
     @Test
@@ -261,7 +281,7 @@ class DatabaseBackupExecutorTest {
             
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
-            .path("/root/readonly-dir") // 일반적으로 접근 불가능한 경로
+            .path("/invalid/path/that/cannot/be/created") // 생성 불가능한 경로
             .retention("30")
             .compress(false)
             .build();
@@ -269,12 +289,23 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
+            .notification(NotificationConfig.builder().enabled(false).build())
+            .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
-        // when & then
-        assertThrows(IOException.class, () -> {
-            executor.executeBackup(config);
-        });
+        // when
+        BackupResult result = executor.executeBackup(config);
+        
+        // then
+        assertNotNull(result);
+        assertEquals(BackupResult.Status.FAILED, result.getStatus());
+        assertFalse(result.getErrors().isEmpty());
+        assertTrue(result.getErrors().stream()
+            .anyMatch(error -> error.getMessage().toLowerCase().contains("directory") ||
+                              error.getMessage().toLowerCase().contains("permission") ||
+                              error.getMessage().toLowerCase().contains("access") ||
+                              error.getMessage().toLowerCase().contains("failed to create") ||
+                              error.getMessage().toLowerCase().contains("invalid")));
     }
 
     private void setupMySQLTestData(DatabaseConfig config) throws SQLException {

@@ -7,6 +7,7 @@ import io.backup4j.core.config.ScheduleConfig;
 import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.config.S3BackupConfig;
 import io.backup4j.core.database.DatabaseType;
+import io.backup4j.core.exception.SchedulerStartException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -66,7 +67,7 @@ class SimpleBackupSchedulerTest {
     }
 
     @Test
-    void start_스케줄비활성화로_시작안함() {
+    void start_스케줄비활성화로_시작안함() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(false)
@@ -90,7 +91,7 @@ class SimpleBackupSchedulerTest {
     }
 
     @Test
-    void start_null스케줄로_시작안함() {
+    void start_null스케줄로_시작안함() throws SchedulerStartException {
         // Given
         scheduler = new SimpleBackupScheduler(config);
 
@@ -102,7 +103,7 @@ class SimpleBackupSchedulerTest {
     }
 
     @Test
-    void start_빈cron표현식으로_시작안함() {
+    void start_빈cron표현식으로_시작안함() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -127,7 +128,7 @@ class SimpleBackupSchedulerTest {
     }
 
     @Test
-    void start_null_cron표현식으로_시작안함() {
+    void start_null_cron표현식으로_시작안함() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -170,14 +171,14 @@ class SimpleBackupSchedulerTest {
         scheduler = new SimpleBackupScheduler(configWithSchedule);
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> scheduler.start());
+        assertThrows(SchedulerStartException.class, () -> scheduler.start());
         assertFalse(scheduler.isRunning());
     }
 
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void start_유효한cron표현식으로_스케줄러시작() {
+    void start_유효한cron표현식으로_스케줄러시작() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -203,7 +204,7 @@ class SimpleBackupSchedulerTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void start_이미실행중인스케줄러로_중복시작방지() {
+    void start_이미실행중인스케줄러로_중복시작방지() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -250,7 +251,7 @@ class SimpleBackupSchedulerTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void stop_실행중인스케줄러_정상중지() {
+    void stop_실행중인스케줄러_정상중지() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -278,7 +279,7 @@ class SimpleBackupSchedulerTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void isRunning_시작후_true반환() {
+    void isRunning_시작후_true반환() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -304,7 +305,7 @@ class SimpleBackupSchedulerTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void isRunning_중지후_false반환() {
+    void isRunning_중지후_false반환() throws SchedulerStartException {
         // Given
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)
@@ -331,7 +332,7 @@ class SimpleBackupSchedulerTest {
 
     @Test
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    void start_매분실행cron_스케줄링동작확인() throws InterruptedException {
+    void start_매분실행cron_스케줄링동작확인() throws InterruptedException, SchedulerStartException {
         // Given - 매분 실행하는 cron (테스트용)
         ScheduleConfig scheduleConfig = ScheduleConfig.builder()
                 .enabled(true)

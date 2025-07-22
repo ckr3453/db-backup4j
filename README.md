@@ -10,6 +10,7 @@
 
 - **JDK version**: JDK 8+
 - **설정 파일 기반**: Properties/YAML 파일로 모든 설정 관리
+- **환경 변수 지원**: 환경변수도 지원, 설정값은 환경변수 > .properties > .yaml > .yml 순으로 우선순위 적용
 - **다중 DB 지원**: MySQL, PostgreSQL 지원 
 - **다중 저장소**: 로컬 파일, 이메일, AWS S3 백업 지원
 - **자동 스케줄링**: cron식 기반 백업 스케줄링
@@ -68,7 +69,7 @@ backup.local.compress=true
 
 # 스케줄링 (선택사항)
 schedule.enabled=true
-schedule.daily=02:00
+schedule.cron=0 0 * * *
 ```
 
 ### 2. Java 코드 실행
@@ -135,7 +136,7 @@ backup:
 
 schedule:
   enabled: false         # true면 스케줄러 시작, false면 1회 실행
-  daily: "02:00"        # HH:MM 형식
+  daily: "0 0 * * *"     # cron 형식
 ```
 
 ### 설정 파일 자동 탐지 순서

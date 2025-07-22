@@ -1,0 +1,21 @@
+# PostgreSQL Configuration Example
+database:
+  type: POSTGRESQL
+  host: localhost
+  port: 5432
+  name: myapp_db
+  username: postgres
+  password: postgres_password
+
+backup:
+  local:
+    enabled: true
+    path: /var/backups/postgresql
+    retention: 7
+    compress: true
+    enableChecksum: true
+    checksumAlgorithm: MD5
+
+schedule:
+  enabled: true
+  cron: "0 3 * * *"  # Daily at 3:00 AM

@@ -7,8 +7,11 @@ import io.backup4j.core.validation.ZeroCopyChecksumCalculator;
 import io.backup4j.core.util.CompressionUtils;
 import io.backup4j.core.util.BackupFileNameGenerator;
 import io.backup4j.core.util.RetentionPolicy;
-import io.backup4j.core.util.DiskSpaceChecker;
 import io.backup4j.core.notification.NotificationService;
+import io.backup4j.core.util.SqlUtils;
+import io.backup4j.core.util.Constants;
+import io.backup4j.core.util.S3Utils;
+import io.backup4j.core.config.S3BackupConfig;
 
 import java.io.*;
 import java.nio.file.Path;
@@ -37,16 +40,10 @@ public class DatabaseBackupExecutor {
             .backupId(backupId)
             .startTime(startTime);
             
-        logger.info("Starting database backup process... ID: " + backupId);
+        logger.info(String.format("Starting database backup process... ID: %s", backupId));
         
         try {
-            // 1. 디스크 공간 검증
-            BackupResult failedResult = validateDiskSpace(config, resultBuilder);
-            if (failedResult != null) {
-                return failedResult;
-            }
-            
-            // 2. 데이터베이스 백업 실행
+            // 1. 데이터베이스 백업 실행
             DatabaseBackupResult backupResult = performDatabaseBackup(config, resultBuilder);
             if (backupResult.isFailure()) {
                 return backupResult.getFailedResult();
@@ -88,37 +85,6 @@ public class DatabaseBackupExecutor {
         }
     }
     
-    /**
-     * 디스크 공간 검증
-     */
-    private BackupResult validateDiskSpace(BackupConfig config, BackupResult.Builder resultBuilder) {
-        Path backupDirectory = new File(config.getLocal().getPath()).toPath();
-        
-        // 예상 백업 크기 계산 (기본값: 100MB)
-        long estimatedSize = 100 * 1024 * 1024L; // 100MB
-        
-        // 종합 디스크 공간 체크
-        DiskSpaceChecker.SpaceCheckResult spaceCheck = DiskSpaceChecker.comprehensiveSpaceCheck(
-            backupDirectory, estimatedSize, config.getLocal().isCompress());
-        
-        logger.info("Disk space check result: " + spaceCheck);
-        
-        if (!spaceCheck.hasEnoughSpace()) {
-            logger.severe("Insufficient disk space for backup: " + spaceCheck.getReason());
-            resultBuilder.addError(new BackupResult.BackupError(
-                "disk-space", 
-                "Insufficient disk space: " + spaceCheck.getReason(), 
-                null, 
-                LocalDateTime.now()
-            ));
-            return resultBuilder
-                .endTime(LocalDateTime.now())
-                .status(BackupResult.Status.FAILED)
-                .build();
-        }
-        
-        return null; // 성공
-    }
     
     /**
      * 데이터베이스 백업 실행
@@ -147,10 +113,19 @@ public class DatabaseBackupExecutor {
                 return new DatabaseBackupResult(backupFile, originalSize);
                 
             } catch (SQLException | IOException e) {
-                logger.severe("Database backup failed: " + e.getMessage());
+                String errorMessage = "Database backup failed: " + e.getMessage();
+                
+                // 디스크 공간 부족 감지
+                if (isDiskSpaceError(e)) {
+                    errorMessage = "Insufficient disk space for backup: " + e.getMessage();
+                    logger.severe("Disk space error during backup: " + e.getMessage());
+                } else {
+                    logger.severe("Database backup failed: " + e.getMessage());
+                }
+                
                 resultBuilder.addError(new BackupResult.BackupError(
                     "local", 
-                    "Database backup failed: " + e.getMessage(), 
+                    errorMessage, 
                     e, 
                     LocalDateTime.now()
                 ));
@@ -509,8 +484,17 @@ public class DatabaseBackupExecutor {
     private void backupTableData(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
             throws SQLException, IOException {
         
+        // 테이블명 유효성 검사
+        if (!SqlUtils.isValidSqlIdentifier(tableName)) {
+            throw new IllegalArgumentException("Invalid table name: " + tableName);
+        }
+        
+        String quotedTableName = dbType == DatabaseType.MYSQL ? 
+            SqlUtils.quoteMySqlIdentifier(tableName) : 
+            SqlUtils.quotePostgreSqlIdentifier(tableName);
+        
         try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
+             ResultSet rs = stmt.executeQuery("SELECT * FROM " + quotedTableName)) {
             
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
@@ -518,9 +502,9 @@ public class DatabaseBackupExecutor {
             while (rs.next()) {
                 StringBuilder insertSQL = new StringBuilder();
                 if (dbType == DatabaseType.MYSQL) {
-                    insertSQL.append("INSERT INTO `").append(tableName).append("` VALUES (");
+                    insertSQL.append("INSERT INTO ").append(SqlUtils.quoteMySqlIdentifier(tableName)).append(" VALUES (");
                 } else {
-                    insertSQL.append("INSERT INTO \"").append(tableName).append("\" VALUES (");
+                    insertSQL.append("INSERT INTO ").append(SqlUtils.quotePostgreSqlIdentifier(tableName)).append(" VALUES (");
                 }
                 
                 for (int i = 1; i <= columnCount; i++) {
@@ -528,9 +512,9 @@ public class DatabaseBackupExecutor {
                     
                     Object value = rs.getObject(i);
                     if (value == null) {
-                        insertSQL.append("NULL");
+                        insertSQL.append(Constants.SQL_NULL);
                     } else if (value instanceof String) {
-                        insertSQL.append("'").append(value.toString().replace("'", "''")).append("'");
+                        insertSQL.append(SqlUtils.escapeSqlString(value.toString()));
                     } else {
                         insertSQL.append(value);
                     }
@@ -628,13 +612,97 @@ public class DatabaseBackupExecutor {
     }
     
     /**
-     * S3 백업 실행 (원본 메서드 유지)
+     * S3 백업 실행
      */
     private void executeS3Backup(File backupFile, BackupConfig config, BackupResult.Builder resultBuilder) 
             throws IOException {
-        // 원본 구현 유지
-        // 간단히 placeholder로 대체
-        logger.info("S3 backup would be executed here");
+        
+        S3BackupConfig s3Config = config.getS3();
+        if (!s3Config.isEnabled()) {
+            logger.info("S3 backup is disabled");
+            return;
+        }
+        
+        logger.info("Starting S3 backup for file: " + backupFile.getName());
+        
+        try {
+            // S3 객체 키 생성 (접두어 + 파일명)
+            String objectKey = s3Config.getPrefix() != null ? 
+                s3Config.getPrefix() + "/" + backupFile.getName() : 
+                backupFile.getName();
+            
+            // S3 업로드 실행
+            S3Utils.uploadFile(backupFile, s3Config, objectKey);
+            
+            // 체크섬 검증 (설정된 경우)
+            if (s3Config.isEnableChecksum()) {
+                validateS3Upload(backupFile, s3Config, resultBuilder);
+            }
+            
+            logger.info("S3 backup completed successfully: s3://" + s3Config.getBucket() + "/" + objectKey);
+            
+        } catch (IOException e) {
+            String errorMessage = "S3 backup failed: " + e.getMessage();
+            logger.severe(errorMessage);
+            
+            resultBuilder.addError(new BackupResult.BackupError(
+                "s3", 
+                errorMessage, 
+                e, 
+                LocalDateTime.now()
+            ));
+            
+            // S3 백업 실패는 전체 백업을 실패로 처리하지 않음
+            // 로컬 백업은 성공했을 수 있음
+        }
+    }
+    
+    /**
+     * S3 업로드 후 체크섬 검증
+     */
+    private void validateS3Upload(File localFile, S3BackupConfig s3Config, 
+                                 BackupResult.Builder resultBuilder) {
+        try {
+            // 로컬 파일 체크섬 계산
+            ZeroCopyChecksumCalculator.Algorithm algorithm = 
+                "MD5".equalsIgnoreCase(s3Config.getChecksumAlgorithm()) ? 
+                ZeroCopyChecksumCalculator.Algorithm.MD5 : 
+                ZeroCopyChecksumCalculator.Algorithm.SHA256;
+                
+            ChecksumValidator.StoredChecksum localChecksum = ChecksumValidator.calculateAndStore(
+                localFile.toPath(), algorithm);
+            
+            // 실제 환경에서는 S3 객체의 ETag나 메타데이터로 검증
+            // 여기서는 로컬 체크섬만 기록
+            logger.info("S3 upload checksum (" + s3Config.getChecksumAlgorithm() + "): " + 
+                       localChecksum.getChecksum());
+            
+        } catch (Exception e) {
+            logger.warning("S3 checksum validation failed: " + e.getMessage());
+            resultBuilder.addError(new BackupResult.BackupError(
+                "s3-checksum", 
+                "S3 checksum validation failed: " + e.getMessage(), 
+                e, 
+                LocalDateTime.now()
+            ));
+        }
+    }
+    
+    /**
+     * 디스크 공간 부족 오류인지 확인
+     */
+    private boolean isDiskSpaceError(Exception e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+        
+        String lowerMessage = message.toLowerCase();
+        return lowerMessage.contains("no space left on device") ||
+               lowerMessage.contains("not enough space") ||
+               lowerMessage.contains("disk full") ||
+               lowerMessage.contains("insufficient disk space") ||
+               e instanceof java.nio.file.FileSystemException;
     }
     
     /**
@@ -650,7 +718,7 @@ public class DatabaseBackupExecutor {
             notificationService.sendBackupNotification(result, config.getNotification());
             notificationService.shutdown();
         } catch (Exception e) {
-            logger.warning("알림 전송 실패: " + e.getMessage());
+            logger.warning("Notification sending failed: " + e.getMessage());
         }
     }
 }

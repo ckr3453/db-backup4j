@@ -214,7 +214,7 @@ public class BackupFileNameGenerator {
             try {
                 String timestampStr = parts[1] + "_" + parts[2];
                 return LocalDateTime.parse(timestampStr, TIMESTAMP_FORMAT);
-            } catch (Exception e) {
+            } catch (java.time.format.DateTimeParseException e) {
                 return null;
             }
         }

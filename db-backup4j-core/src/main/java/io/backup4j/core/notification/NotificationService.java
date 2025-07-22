@@ -2,6 +2,7 @@ package io.backup4j.core.notification;
 
 import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.validation.BackupResult;
+import io.backup4j.core.util.Constants;
 
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
@@ -26,7 +27,7 @@ public class NotificationService {
      * NotificationService 생성자
      */
     public NotificationService() {
-        this.executorService = Executors.newFixedThreadPool(2, r -> {
+        this.executorService = Executors.newFixedThreadPool(Constants.DEFAULT_NOTIFICATION_THREAD_POOL_SIZE, r -> {
             Thread t = new Thread(r, "notification-service");
             t.setDaemon(true);
             return t;
@@ -43,11 +44,11 @@ public class NotificationService {
      */
     public void sendBackupNotification(BackupResult result, NotificationConfig config) {
         if (config == null || !config.isEnabled() || !config.hasEnabledNotifiers()) {
-            logger.info("알림이 비활성화되어 있습니다.");
+            logger.info("Notifications are disabled.");
             return;
         }
         
-        logger.info("백업 완료 알림 전송 시작...");
+        logger.info("Starting backup completion notification sending...");
         
         // 알림 메시지 생성
         String title = createNotificationTitle(result);
@@ -58,9 +59,9 @@ public class NotificationService {
             if (config.getEmail() != null && config.getEmail().isEnabled()) {
                 try {
                     emailNotifier.sendNotification(title, message, result, config.getEmail());
-                    logger.info("이메일 알림 전송 완료");
+                    logger.info("Email notification sending completed");
                 } catch (Exception e) {
-                    logger.warning("이메일 알림 전송 실패: " + e.getMessage());
+                    logger.warning("Email notification sending failed: " + e.getMessage());
                 }
             }
         }, executorService);
@@ -69,9 +70,9 @@ public class NotificationService {
             if (config.getWebhook() != null && config.getWebhook().isEnabled()) {
                 try {
                     webhookNotifier.sendNotification(title, message, result, config.getWebhook());
-                    logger.info("웹훅 알림 전송 완료");
+                    logger.info("Webhook notification sending completed");
                 } catch (Exception e) {
-                    logger.warning("웹훅 알림 전송 실패: " + e.getMessage());
+                    logger.warning("Webhook notification sending failed: " + e.getMessage());
                 }
             }
         }, executorService);
@@ -79,9 +80,9 @@ public class NotificationService {
         // 모든 알림 완료 대기 (최대 30초)
         try {
             CompletableFuture.allOf(emailFuture, webhookFuture)
-                .get(30, TimeUnit.SECONDS);
+                .get(Constants.NOTIFICATION_TIMEOUT_SEC, Constants.NOTIFICATION_TIMEOUT_UNIT);
         } catch (Exception e) {
-            logger.warning("알림 전송 중 타임아웃 또는 오류 발생: " + e.getMessage());
+            logger.warning("Timeout or error occurred during notification sending: " + e.getMessage());
         }
     }
     
@@ -224,6 +225,6 @@ public class NotificationService {
             Thread.currentThread().interrupt();
         }
         
-        logger.info("알림 서비스가 종료되었습니다.");
+        logger.info("Notification service has been terminated.");
     }
 }

@@ -1,0 +1,68 @@
+# db-backup4j Configuration Example (YAML Format)
+# This file demonstrates all available configuration options
+
+# Database Configuration (Required)
+database:
+  type: MYSQL          # MYSQL or POSTGRESQL
+  host: localhost
+  port: 3306
+  name: myapp_db
+  username: backup_user
+  password: backup_password
+
+# Local Backup Configuration
+backup:
+  local:
+    enabled: true
+    path: ./db-backup4j/backups
+    retention: 30                    # Days to keep backup files
+    compress: true                   # Enable GZIP compression
+    enableChecksum: true             # Enable checksum validation
+    checksumAlgorithm: SHA256        # MD5 or SHA256
+
+  # S3 Backup Configuration
+  s3:
+    enabled: true
+    bucket: my-backup-bucket
+    region: us-west-2
+    accessKey: your-access-key
+    secretKey: your-secret-key
+    prefix: database-backups/prod
+    compress: true                   # Enable compression for S3 upload
+    enableChecksum: true             # Enable checksum validation for S3
+    checksumAlgorithm: SHA256        # MD5 or SHA256
+
+# Notification Configuration (replaces email backup)
+notification:
+  enabled: true
+  
+  # Email Notifications
+  email:
+    enabled: true
+    recipients: admin@company.com,dba@company.com
+    username: backup@company.com
+    password: your-app-password
+    subject: Database Backup Report
+    smtp:
+      host: smtp.gmail.com
+      port: 587
+      useTls: true
+      useAuth: true
+      
+  # Webhook Notifications (Slack, Discord, Teams, etc.)
+  webhook:
+    enabled: true
+    url: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+    useRichFormat: true              # Use rich formatting for supported platforms
+
+# Scheduler Configuration
+schedule:
+  enabled: true
+  cron: "0 2 * * *"                  # Daily at 2:00 AM
+
+# Common cron expressions:
+# "0 2 * * *"     - Daily at 2:00 AM
+# "0 2 * * 0"     - Weekly on Sunday at 2:00 AM
+# "0 2 1 * *"     - Monthly on 1st day at 2:00 AM
+# "0 */6 * * *"   - Every 6 hours
+# "0 0 */3 * *"   - Every 3 days at midnight

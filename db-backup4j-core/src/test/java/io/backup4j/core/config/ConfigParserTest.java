@@ -8,7 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.io.FileWriter;
-import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -41,7 +40,7 @@ class ConfigParserTest {
             "backup.local.retention=30\n" +
             "backup.local.compress=true\n" +
             "\n" +
-            "backup.email.enabled=false\n" +
+            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         
@@ -66,7 +65,7 @@ class ConfigParserTest {
         assertEquals("30", config.getLocal().getRetention());
         assertTrue(config.getLocal().isCompress());
         
-        assertFalse(config.getEmail().isEnabled());
+        assertFalse(config.getNotification().isEnabled());
         assertFalse(config.getS3().isEnabled());
         assertFalse(config.getSchedule().isEnabled());
     }
@@ -88,7 +87,7 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  email:\n" +
+            "  notification:\n" +
             "    enabled: false\n" +
             "  s3:\n" +
             "    enabled: false\n" +
@@ -117,7 +116,7 @@ class ConfigParserTest {
         assertEquals("30", config.getLocal().getRetention());
         assertTrue(config.getLocal().isCompress());
         
-        assertFalse(config.getEmail().isEnabled());
+        assertFalse(config.getNotification().isEnabled());
         assertFalse(config.getS3().isEnabled());
         assertFalse(config.getSchedule().isEnabled());
     }
@@ -143,7 +142,7 @@ class ConfigParserTest {
             "database.username=user\n" +
             "database.password=pass\n" +
             "backup.local.enabled=true\n" +
-            "backup.email.enabled=false\n" +
+            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         
@@ -185,7 +184,7 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  email:\n" +
+            "  notification:\n" +
             "    enabled: false\n" +
             "  s3:\n" +
             "    enabled: false\n" +
@@ -234,8 +233,8 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  email:\n" +
-            "    enabled: false  # Disable email backup\n" +
+            "  notification:\n" +
+            "    enabled: false  # Disable notification\n" +
             "  s3:\n" +
             "    enabled: false\n" +
             "\n" +
@@ -254,7 +253,7 @@ class ConfigParserTest {
         assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
         assertEquals("localhost", config.getDatabase().getHost());
         assertTrue(config.getLocal().isEnabled());
-        assertFalse(config.getEmail().isEnabled());
+        assertFalse(config.getNotification().isEnabled());
     }
 
     @Test
@@ -342,41 +341,22 @@ class ConfigParserTest {
     }
 
     @Test
-    void parseFromEnvironment_환경변수우선순위_정상동작() throws Exception {
-        // given - 파일 설정
-        String content = "database.type=MYSQL\n" +
-            "database.host=file-host\n" +
-            "database.port=3306\n" +
-            "database.name=filedb\n" +
-            "database.username=fileuser\n" +
-            "database.password=filepass\n";
+    void parseFromEnvironment_환경변수파싱_정상동작() {
+        // when - 실제 환경변수가 없는 경우 테스트
+        BackupConfig config = ConfigParser.parseFromEnvironment();
         
-        try (FileWriter writer = new FileWriter(propertiesFile.toFile())) {
-            writer.write(content);
-        }
+        // then - 환경변수가 없으므로 기본값들이 설정됨
+        assertNotNull(config);
+        assertNotNull(config.getDatabase());
+        assertNotNull(config.getLocal());
+        assertNotNull(config.getNotification());
+        assertNotNull(config.getS3());
+        assertNotNull(config.getSchedule());
         
-        // 환경변수 설정 시뮬레이션을 위한 Properties 생성
-        Properties envProps = new Properties();
-        envProps.setProperty("database.type", "POSTGRESQL");
-        envProps.setProperty("database.host", "env-host");
-        envProps.setProperty("database.port", "5432");
-        
-        Properties fileProps = new Properties();
-        fileProps.setProperty("database.type", "MYSQL");
-        fileProps.setProperty("database.host", "file-host");
-        fileProps.setProperty("database.port", "3306");
-        fileProps.setProperty("database.name", "filedb");
-        fileProps.setProperty("database.username", "fileuser");
-        fileProps.setProperty("database.password", "filepass");
-        
-        // when
-        Properties merged = ConfigParser.mergeWithEnvironmentVariables(fileProps);
-        
-        // then - 환경변수가 파일 설정을 덮어씀
-        assertNotNull(merged);
-        // 실제 환경변수가 없으므로 파일 값 그대로 유지
-        assertEquals("MYSQL", merged.getProperty("database.type"));
-        assertEquals("file-host", merged.getProperty("database.host"));
+        // 기본값 확인
+        assertEquals("localhost", config.getDatabase().getHost());
+        assertTrue(config.getLocal().isEnabled());
+        assertEquals("./db-backup4j", config.getLocal().getPath());
     }
 
     @Test
@@ -405,14 +385,16 @@ class ConfigParserTest {
             "  password: pass\n" +
             "\n" +
             "backup:\n" +
-            "  email:\n" +
+            "  notification:\n" +
             "    enabled: true\n" +
-            "    recipients: \"user1@example.com,user2@example.com\"\n" +
-            "    username: sender@example.com\n" +
-            "    password: emailpass\n" +
-            "    smtp:\n" +
-            "      host: smtp.example.com\n" +
-            "      port: 587\n" +
+            "    email:\n" +
+            "      enabled: true\n" +
+            "      recipients: \"user1@example.com,user2@example.com\"\n" +
+            "      username: sender@example.com\n" +
+            "      password: emailpass\n" +
+            "      smtp:\n" +
+            "        host: smtp.example.com\n" +
+            "        port: 587\n" +
             "  local:\n" +
             "    enabled: false\n" +
             "  s3:\n" +
@@ -427,13 +409,14 @@ class ConfigParserTest {
         
         // then
         assertNotNull(config);
-        assertTrue(config.getEmail().isEnabled());
-        assertEquals("sender@example.com", config.getEmail().getUsername());
-        assertEquals("emailpass", config.getEmail().getPassword());
-        assertEquals("smtp.example.com", config.getEmail().getSmtp().getHost());
-        assertEquals(587, config.getEmail().getSmtp().getPort());
-        assertNotNull(config.getEmail().getRecipients());
-        assertEquals(2, config.getEmail().getRecipients().size());
+        assertTrue(config.getNotification().isEnabled());
+        assertTrue(config.getNotification().getEmail().isEnabled());
+        assertEquals("sender@example.com", config.getNotification().getEmail().getUsername());
+        assertEquals("emailpass", config.getNotification().getEmail().getPassword());
+        assertEquals("smtp.example.com", config.getNotification().getEmail().getSmtp().getHost());
+        assertEquals(587, config.getNotification().getEmail().getSmtp().getPort());
+        assertNotNull(config.getNotification().getEmail().getRecipients());
+        assertEquals(2, config.getNotification().getEmail().getRecipients().size());
     }
 
     @Test
@@ -445,7 +428,7 @@ class ConfigParserTest {
             "database.name=testdb\n" +
             "database.username=user\n" +
             "database.password=pass\n" +
-            "backup.email.smtp.port=invalid_smtp_port\n";
+            "backup.notification.email.smtp.port=invalid_smtp_port\n";
         
         try (FileWriter writer = new FileWriter(propertiesFile.toFile())) {
             writer.write(content);
@@ -457,6 +440,6 @@ class ConfigParserTest {
         // then
         assertNotNull(config);
         assertEquals(0, config.getDatabase().getPort()); // 잘못된 포트는 0으로 설정
-        assertEquals(0, config.getEmail().getSmtp().getPort()); // 잘못된 SMTP 포트는 0으로 설정
+        assertEquals(0, config.getNotification().getEmail().getSmtp().getPort()); // 잘못된 SMTP 포트는 0으로 설정
     }
 }
