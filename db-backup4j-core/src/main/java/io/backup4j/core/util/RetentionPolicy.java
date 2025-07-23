@@ -139,7 +139,7 @@ public class RetentionPolicy {
                         BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
                         Instant fileTime = attrs.creationTime().toInstant();
                         
-                        if (fileTime.isBefore(cutoffTime)) {
+                        if (fileTime.isBefore(cutoffTime) || fileTime.equals(cutoffTime)) {
                             long fileSize = attrs.size();
                             
                             if (dryRun) {
