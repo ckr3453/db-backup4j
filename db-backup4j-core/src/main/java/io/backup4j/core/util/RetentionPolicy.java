@@ -25,6 +25,40 @@ public class RetentionPolicy {
     private static final Logger logger = Logger.getLogger(RetentionPolicy.class.getName());
     
     /**
+     * 시간 공급자 인터페이스 - 테스트 시 모킹 가능
+     */
+    public interface TimeProvider {
+        Instant now();
+    }
+    
+    /**
+     * 기본 시간 공급자 - 시스템 현재 시간 반환
+     */
+    public static class SystemTimeProvider implements TimeProvider {
+        @Override
+        public Instant now() {
+            return Instant.now();
+        }
+    }
+    
+    private static TimeProvider timeProvider = new SystemTimeProvider();
+    
+    /**
+     * 테스트를 위한 시간 공급자 설정
+     * @param provider 시간 공급자
+     */
+    public static void setTimeProvider(TimeProvider provider) {
+        timeProvider = provider != null ? provider : new SystemTimeProvider();
+    }
+    
+    /**
+     * 시간 공급자를 기본값으로 재설정
+     */
+    public static void resetTimeProvider() {
+        timeProvider = new SystemTimeProvider();
+    }
+    
+    /**
      * 백업 파일 정리 결과를 담는 클래스
      */
     public static class CleanupResult {
@@ -120,7 +154,7 @@ public class RetentionPolicy {
         
         try {
             // 현재 시간에서 보존 기간을 뺀 임계점 계산
-            Instant cutoffTime = Instant.now().minusSeconds(retentionDays * 24 * 60 * 60L);
+            Instant cutoffTime = timeProvider.now().minusSeconds(retentionDays * 24 * 60 * 60L);
             logger.info("Cutoff time for cleanup: " + cutoffTime);
             
             // 백업 파일 패턴으로 필터링 (*.sql, *.sql.gz)
@@ -279,7 +313,7 @@ public class RetentionPolicy {
         }
         
         public boolean isOlderThan(int days) {
-            Instant cutoff = Instant.now().minusSeconds(days * 24 * 60 * 60L);
+            Instant cutoff = timeProvider.now().minusSeconds(days * 24 * 60 * 60L);
             return creationTime.isBefore(cutoff);
         }
         
