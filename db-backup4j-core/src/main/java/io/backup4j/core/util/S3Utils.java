@@ -9,6 +9,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -54,7 +55,7 @@ public class S3Utils {
         
         try {
             // 파일 해시 계산
-            String contentSha256 = calculateSha256(file);
+            String contentSha256 = CryptoUtils.calculateSha256(file);
             
             // HTTP 요청 설정
             connection.setRequestMethod("PUT");
@@ -133,13 +134,13 @@ public class S3Utils {
             // 2. String to Sign 생성
             String credentialScope = dateStamp + "/" + config.getRegion() + "/" + AWS_SERVICE + "/" + AWS_REQUEST;
             String stringToSign = AWS_ALGORITHM + "\n" + timestamp + "\n" + credentialScope + "\n" + 
-                sha256Hex(canonicalRequest);
+                CryptoUtils.calculateSha256(canonicalRequest);
             
             // 3. Signing Key 생성
-            byte[] signingKey = getSignatureKey(config.getSecretKey(), dateStamp, config.getRegion(), AWS_SERVICE);
+            byte[] signingKey = CryptoUtils.getAwsSignatureKey(config.getSecretKey(), dateStamp, config.getRegion(), AWS_SERVICE);
             
             // 4. Signature 계산
-            String signature = hmacSha256Hex(signingKey, stringToSign);
+            String signature = CryptoUtils.hmacSha256Hex(signingKey, stringToSign);
             
             // 5. Authorization 헤더 생성
             return AWS_ALGORITHM + " " +
@@ -170,110 +171,26 @@ public class S3Utils {
             canonicalHeaders + "\n" + signedHeaders + "\n" + payloadHash;
     }
     
-    /**
-     * AWS Signature Version 4 서명 키를 생성합니다.
-     */
-    private static byte[] getSignatureKey(String key, String dateStamp, String regionName, String serviceName) 
-            throws Exception {
-        byte[] kDate = hmacSha256(("AWS4" + key).getBytes(StandardCharsets.UTF_8), dateStamp);
-        byte[] kRegion = hmacSha256(kDate, regionName);
-        byte[] kService = hmacSha256(kRegion, serviceName);
-        return hmacSha256(kService, AWS_REQUEST);
-    }
-    
-    /**
-     * HMAC-SHA256을 계산합니다.
-     */
-    private static byte[] hmacSha256(byte[] key, String data) throws Exception {
-        Mac mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec(key, "HmacSHA256"));
-        return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-    }
-    
-    /**
-     * HMAC-SHA256을 hex 문자열로 계산합니다.
-     */
-    private static String hmacSha256Hex(byte[] key, String data) throws Exception {
-        return bytesToHex(hmacSha256(key, data));
-    }
-    
-    /**
-     * 파일의 SHA-256 해시를 계산합니다.
-     */
-    private static String calculateSha256(File file) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            
-            try (FileInputStream fis = new FileInputStream(file);
-                 BufferedInputStream bis = new BufferedInputStream(fis)) {
-                
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                
-                while ((bytesRead = bis.read(buffer)) != -1) {
-                    digest.update(buffer, 0, bytesRead);
-                }
-            }
-            
-            return bytesToHex(digest.digest());
-            
-        } catch (Exception e) {
-            throw new IOException("Failed to calculate SHA-256 hash", e);
-        }
-    }
-    
-    /**
-     * 문자열의 SHA-256 해시를 계산합니다.
-     */
-    private static String sha256Hex(String data) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(data.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(hash);
-        } catch (Exception e) {
-            throw new IOException("Failed to calculate SHA-256 hash", e);
-        }
-    }
-    
-    /**
-     * 바이트 배열을 hex 문자열로 변환합니다.
-     */
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder result = new StringBuilder();
-        for (byte b : bytes) {
-            result.append(String.format("%02x", b));
-        }
-        return result.toString();
-    }
     
     /**
      * HTTP 에러 응답을 읽습니다.
      */
     private static String readErrorResponse(HttpURLConnection connection) {
-        try (InputStream errorStream = connection.getErrorStream()) {
-            if (errorStream == null) {
-                return "No error details available";
-            }
-            
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(errorStream, StandardCharsets.UTF_8))) {
-                
-                StringBuilder response = new StringBuilder();
-                String line;
-                
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                    if (response.length() > Constants.MAX_ERROR_RESPONSE_SIZE) {
-                        response.append("...");
-                        break;
-                    }
-                }
-                
-                return response.toString();
-            }
+        InputStream errorStream = null;
+        try {
+            errorStream = connection.getErrorStream();
+            return HttpResponseReader.readResponse(errorStream, Constants.MAX_ERROR_RESPONSE_SIZE, "No error details available");
             
         } catch (Exception e) {
             return "Failed to read error response: " + e.getMessage();
+        } finally {
+            if (errorStream != null) {
+                try {
+                    errorStream.close();
+                } catch (IOException ignored) {
+                    // 무시함 - 리소스 정리 실패는 치명적이지 않음
+                }
+            }
         }
     }
 }

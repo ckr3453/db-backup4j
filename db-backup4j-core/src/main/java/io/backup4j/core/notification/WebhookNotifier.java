@@ -4,6 +4,7 @@ import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.validation.BackupResult;
 import io.backup4j.core.exception.WebhookNotificationException;
 import io.backup4j.core.util.Constants;
+import io.backup4j.core.util.HttpResponseReader;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -22,7 +23,7 @@ public class WebhookNotifier {
     
     /**
      * 웹훅 알림을 전송합니다
-     * 
+     *
      * @param title 알림 제목
      * @param message 알림 메시지
      * @param result 백업 결과
@@ -33,7 +34,7 @@ public class WebhookNotifier {
                                NotificationConfig.WebhookConfig config) throws Exception {
         
         if (config.getUrl() == null || config.getUrl().trim().isEmpty()) {
-            throw new IllegalArgumentException("웹훅 URL이 설정되지 않았습니다.");
+            throw new IllegalArgumentException("Webhook URL is not configured");
         }
         
         logger.info("Webhook notification sending started: " + config.getUrl());
@@ -64,13 +65,13 @@ public class WebhookNotifier {
                         Thread.sleep(Constants.DEFAULT_WEBHOOK_RETRY_DELAY_MS * attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        throw new Exception("웹훅 전송 중 인터럽트 발생", ie);
+                        throw new Exception("Thread interrupted during webhook transmission", ie);
                     }
                 }
             }
         }
         
-        throw new Exception("웹훅 전송 최종 실패 (최대 재시도 횟수 초과)", lastException);
+        throw new Exception("Webhook transmission failed after maximum retry attempts", lastException);
     }
     
     /**
@@ -141,7 +142,7 @@ public class WebhookNotifier {
             
             if (responseCode < 200 || responseCode >= 300) {
                 String errorBody = readErrorResponse(connection);
-                throw new Exception("웹훅 전송 실패: " + responseCode + " " + responseMessage + 
+                throw new Exception("Webhook transmission failed: " + responseCode + " " + responseMessage + 
                                   (errorBody != null ? " - " + errorBody : ""));
             }
             
@@ -167,23 +168,9 @@ public class WebhookNotifier {
      * @return 오류 응답 본문
      */
     private String readErrorResponse(HttpURLConnection connection) {
-        try (InputStream errorStream = connection.getErrorStream()) {
-            if (errorStream == null) {
-                return null;
-            }
-            
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(errorStream, StandardCharsets.UTF_8))) {
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                    if (response.length() > Constants.MAX_ERROR_RESPONSE_SIZE) { // 응답 크기 제한
-                        response.append("...");
-                        break;
-                    }
-                }
-                return response.toString();
-            }
+        try {
+            InputStream errorStream = connection.getErrorStream();
+            return HttpResponseReader.readResponse(errorStream, Constants.MAX_ERROR_RESPONSE_SIZE);
         } catch (Exception e) {
             logger.warning("Failed to read error response: " + e.getMessage());
             return null;
@@ -197,23 +184,9 @@ public class WebhookNotifier {
      * @return 성공 응답 본문
      */
     private String readSuccessResponse(HttpURLConnection connection) {
-        try (InputStream inputStream = connection.getInputStream()) {
-            if (inputStream == null) {
-                return null;
-            }
-            
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                    if (response.length() > Constants.MAX_SUCCESS_RESPONSE_SIZE) { // 응답 크기 제한
-                        response.append("...");
-                        break;
-                    }
-                }
-                return response.toString();
-            }
+        try {
+            InputStream inputStream = connection.getInputStream();
+            return HttpResponseReader.readResponse(inputStream, Constants.MAX_SUCCESS_RESPONSE_SIZE);
         } catch (Exception e) {
             logger.warning("Failed to read success response: " + e.getMessage());
             return null;
@@ -229,7 +202,7 @@ public class WebhookNotifier {
     public boolean testConnection(NotificationConfig.WebhookConfig config) {
         try {
             WebhookChannel channel = config.getEffectiveChannel();
-            String testPayload = channel.createPayload("db-backup4j 연결 테스트");
+            String testPayload = channel.createPayload("db-backup4j connection test");
             
             sendHttpRequest(config.getUrl(), testPayload, config, channel);
             return true;

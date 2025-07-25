@@ -1,5 +1,7 @@
 package io.backup4j.core.validation;
 
+import io.backup4j.core.util.CryptoUtils;
+
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -63,7 +65,7 @@ public class ZeroCopyChecksumCalculator {
                 long fileSize = channel.size();
                 
                 if (fileSize == 0) {
-                    return bytesToHex(digest.digest());
+                    return CryptoUtils.bytesToHex(digest.digest());
                 }
                 
                 long position = 0;
@@ -79,7 +81,7 @@ public class ZeroCopyChecksumCalculator {
                     
                     // MappedByteBuffer는 JVM이 자동으로 정리하므로 명시적 GC 호출 불필요
                     // 대용량 파일 처리 시 메모리 사용량 로깅
-                    if (position % (chunkSize * 8) == 0) {
+                    if (position % (chunkSize * 8L) == 0) {
                         long processedMB = position / (1024 * 1024);
                         long totalMB = fileSize / (1024 * 1024);
                         logger.fine(String.format("Checksum calculation progress: %d MB / %d MB (%.1f%%)", 
@@ -88,10 +90,10 @@ public class ZeroCopyChecksumCalculator {
                 }
             }
             
-            return bytesToHex(digest.digest());
+            return CryptoUtils.bytesToHex(digest.digest());
             
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("지원하지 않는 해시 알고리즘: " + algorithm.getAlgorithmName(), e);
+            throw new RuntimeException("Unsupported hash algorithm: " + algorithm.getAlgorithmName(), e);
         }
     }
     
@@ -177,31 +179,21 @@ public class ZeroCopyChecksumCalculator {
     
     private static void validateInputs(Path filePath, int chunkSize) {
         if (filePath == null) {
-            throw new IllegalArgumentException("파일 경로는 null일 수 없습니다");
+            throw new IllegalArgumentException("File path cannot be null");
         }
         
         if (!filePath.toFile().exists()) {
-            throw new IllegalArgumentException("파일이 존재하지 않습니다: " + filePath);
+            throw new IllegalArgumentException("File does not exist: " + filePath);
         }
         
         if (!filePath.toFile().isFile()) {
-            throw new IllegalArgumentException("디렉토리가 아닌 파일이어야 합니다: " + filePath);
+            throw new IllegalArgumentException("Path must be a file, not a directory: " + filePath);
         }
         
         if (chunkSize <= 0 || chunkSize > MAX_CHUNK_SIZE) {
             throw new IllegalArgumentException(
-                String.format("청크 크기는 1 ~ %d 바이트 사이여야 합니다: %d", MAX_CHUNK_SIZE, chunkSize));
+                String.format("Chunk size must be between 1 and %d bytes: %d", MAX_CHUNK_SIZE, chunkSize));
         }
     }
     
-    /**
-     * 바이트 배열을 16진수 문자열로 변환 (Java 8 호환)
-     */
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder result = new StringBuilder();
-        for (byte b : bytes) {
-            result.append(String.format("%02x", b));
-        }
-        return result.toString();
-    }
 }

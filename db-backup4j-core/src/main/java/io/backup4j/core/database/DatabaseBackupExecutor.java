@@ -170,7 +170,7 @@ public class DatabaseBackupExecutor {
                     logger.warning("Failed to delete original backup file: " + backupFile.getAbsolutePath());
                 }
                 
-                logger.info("Backup file compressed: " + compressionMetrics.toString());
+                logger.info("Backup file compressed: " + compressionMetrics);
                 
             } catch (Exception e) {
                 logger.warning("Compression failed: " + e.getMessage());
@@ -614,8 +614,7 @@ public class DatabaseBackupExecutor {
     /**
      * S3 백업 실행
      */
-    private void executeS3Backup(File backupFile, BackupConfig config, BackupResult.Builder resultBuilder) 
-            throws IOException {
+    private void executeS3Backup(File backupFile, BackupConfig config, BackupResult.Builder resultBuilder) {
         
         S3BackupConfig s3Config = config.getS3();
         if (!s3Config.isEnabled()) {

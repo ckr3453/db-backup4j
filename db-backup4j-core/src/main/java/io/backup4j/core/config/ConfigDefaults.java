@@ -37,7 +37,7 @@ public final class ConfigDefaults {
     public static final boolean DEFAULT_NOTIFICATION_ENABLED = true;
     public static final boolean DEFAULT_EMAIL_ENABLED = false;
     public static final boolean DEFAULT_WEBHOOK_ENABLED = false;
-    public static final String DEFAULT_EMAIL_SUBJECT = "DB Backup4j 백업 완료";
+    public static final String DEFAULT_EMAIL_SUBJECT = "DB Backup4j Backup Completed";
     public static final String DEFAULT_EMAIL_TEMPLATE = "simple";
     public static final boolean DEFAULT_SMTP_TLS = true;
     public static final boolean DEFAULT_SMTP_AUTH = true;

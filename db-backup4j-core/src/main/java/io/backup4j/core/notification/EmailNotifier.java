@@ -3,6 +3,7 @@ package io.backup4j.core.notification;
 import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.validation.BackupResult;
 import io.backup4j.core.exception.EmailNotificationException;
+import io.backup4j.core.util.CryptoUtils;
 
 import java.io.*;
 import java.net.Socket;
@@ -89,14 +90,14 @@ public class EmailNotifier {
         // 서버 인사말 읽기
         String response = reader.readLine();
         if (!response.startsWith("220")) {
-            throw new EmailNotificationException("SMTP 서버 연결 실패: " + response);
+            throw new EmailNotificationException("SMTP server connection failed: " + response);
         }
         
         // EHLO 명령어
         writer.println("EHLO " + getLocalHostname());
         response = reader.readLine();
         if (!response.startsWith("250")) {
-            throw new EmailNotificationException("EHLO 실패: " + response);
+            throw new EmailNotificationException("EHLO command failed: " + response);
         }
         
         // 추가 EHLO 응답 읽기
@@ -110,7 +111,7 @@ public class EmailNotifier {
             writer.println("STARTTLS");
             response = reader.readLine();
             if (!response.startsWith("220")) {
-                throw new EmailNotificationException("STARTTLS 실패: " + response);
+                throw new EmailNotificationException("STARTTLS command failed: " + response);
             }
             
             // 실제 TLS 업그레이드는 복잡하므로 생략
@@ -143,23 +144,23 @@ public class EmailNotifier {
         writer.println("AUTH LOGIN");
         String response = reader.readLine();
         if (!response.startsWith("334")) {
-            throw new EmailNotificationException("AUTH LOGIN 실패: " + response);
+            throw new EmailNotificationException("AUTH LOGIN command failed: " + response);
         }
         
         // 사용자명 전송
-        String encodedUsername = Base64.getEncoder().encodeToString(config.getUsername().getBytes(StandardCharsets.UTF_8));
+        String encodedUsername = CryptoUtils.base64Encode(config.getUsername());
         writer.println(encodedUsername);
         response = reader.readLine();
         if (!response.startsWith("334")) {
-            throw new EmailNotificationException("사용자명 인증 실패: " + response);
+            throw new EmailNotificationException("Username authentication failed: " + response);
         }
         
         // 비밀번호 전송
-        String encodedPassword = Base64.getEncoder().encodeToString(config.getPassword().getBytes(StandardCharsets.UTF_8));
+        String encodedPassword = CryptoUtils.base64Encode(config.getPassword());
         writer.println(encodedPassword);
         response = reader.readLine();
         if (!response.startsWith("235")) {
-            throw new EmailNotificationException("비밀번호 인증 실패: " + response);
+            throw new EmailNotificationException("Password authentication failed: " + response);
         }
         } catch (EmailNotificationException e) {
             throw e;
@@ -186,7 +187,7 @@ public class EmailNotifier {
         writer.println("MAIL FROM:<" + config.getUsername() + ">");
         String response = reader.readLine();
         if (!response.startsWith("250")) {
-            throw new EmailNotificationException("MAIL FROM 실패: " + response);
+            throw new EmailNotificationException("MAIL FROM command failed: " + response);
         }
         
         // RCPT TO (모든 수신자에게)
@@ -194,7 +195,7 @@ public class EmailNotifier {
             writer.println("RCPT TO:<" + recipient + ">");
             response = reader.readLine();
             if (!response.startsWith("250")) {
-                throw new EmailNotificationException("RCPT TO 실패: " + response);
+                throw new EmailNotificationException("RCPT TO command failed: " + response);
             }
         }
         
@@ -202,7 +203,7 @@ public class EmailNotifier {
         writer.println("DATA");
         response = reader.readLine();
         if (!response.startsWith("354")) {
-            throw new EmailNotificationException("DATA 실패: " + response);
+            throw new EmailNotificationException("DATA command failed: " + response);
         }
         
         // 메시지 헤더 및 본문
@@ -212,7 +213,7 @@ public class EmailNotifier {
         
         response = reader.readLine();
         if (!response.startsWith("250")) {
-            throw new EmailNotificationException("메시지 전송 실패: " + response);
+            throw new EmailNotificationException("Message sending failed: " + response);
         }
         
         // QUIT
