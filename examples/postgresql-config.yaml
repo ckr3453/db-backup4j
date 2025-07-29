@@ -1,9 +1,6 @@
 # PostgreSQL Configuration Example
 database:
-  type: POSTGRESQL
-  host: localhost
-  port: 5432
-  name: myapp_db
+  url: jdbc:postgresql://localhost:5432/mydb?currentSchema=backup_schema
   username: postgres
   password: postgres_password
 
@@ -13,8 +10,6 @@ backup:
     path: /var/backups/postgresql
     retention: 7
     compress: true
-    enableChecksum: true
-    checksumAlgorithm: MD5
 
 schedule:
   enabled: true

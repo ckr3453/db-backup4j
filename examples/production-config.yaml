@@ -2,10 +2,7 @@
 # Full configuration with all features enabled
 
 database:
-  type: MYSQL
-  host: db.production.com
-  port: 3306
-  name: production_db
+  url: jdbc:postgresql://localhost:5432/mydb?currentSchema=backup_schema
   username: backup_service
   password: ${DB_BACKUP_PASSWORD}  # Use environment variable
 
@@ -15,32 +12,14 @@ backup:
     path: /backup/database
     retention: 90
     compress: true
-    enableChecksum: true
-    checksumAlgorithm: SHA256
 
   s3:
     enabled: true
     bucket: company-database-backups
     region: us-east-1
-    accessKey: ${AWS_ACCESS_KEY_ID}
-    secretKey: ${AWS_SECRET_ACCESS_KEY}
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}
     prefix: production/mysql
-    compress: true
-    enableChecksum: true
-    checksumAlgorithm: SHA256
-
-  email:
-    enabled: true
-    smtp:
-      host: smtp.company.com
-      port: 587
-      auth: true
-      starttls: true
-    from: database-backup@company.com
-    to: dba-team@company.com,devops@company.com
-    username: database-backup@company.com
-    password: ${EMAIL_PASSWORD}
-    subject: "[PROD] Database Backup Report"
 
 schedule:
   enabled: true

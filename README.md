@@ -12,7 +12,7 @@
 - **설정 파일 기반**: Properties/YAML 파일로 모든 설정 관리
 - **환경 변수 지원**: 환경변수도 지원, 설정값은 환경변수 > .properties > .yaml > .yml 순으로 우선순위 적용
 - **다중 DB 지원**: MySQL, PostgreSQL 지원 
-- **다중 저장소**: 로컬 파일, 이메일, AWS S3 백업 지원
+- **다중 저장소**: 로컬 파일, AWS S3 백업 지원
 - **자동 스케줄링**: cron식 기반 백업 스케줄링
 - **프레임워크 독립적**: Spring Boot, 일반 Java 애플리케이션 모두 지원
 - **한 줄 실행**: `DbBackup4jInitializer.run()` 한 줄로 모든 기능 사용
@@ -53,11 +53,8 @@ dependencies {
 
 **db-backup4j.properties** (프로젝트 루트에 생성)
 ```properties
-# 데이터베이스 설정 (필수)
-database.type=MYSQL
-database.host=localhost
-database.port=3306
-database.name=myapp_db
+# 데이터베이스 설정 (필수) - JDBC URL 방식
+database.url=jdbc:mysql://localhost:3306/myapp_db?serverTimezone=UTC
 database.username=backup_user
 database.password=backup_password
 
@@ -97,18 +94,48 @@ public class MyApplication {
 }
 ```
 
+### 4. Spring Boot에서 사용
+
+Spring Boot 애플리케이션에서는 ApplicationRunner를 사용하여 백업을 실행할 수 있습니다:
+
+```java
+@Component
+public class BackupRunner implements ApplicationRunner {
+    
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        // 자동 설정 파일 감지
+        DbBackup4jInitializer.run();
+        
+        // 또는 클래스패스의 설정 파일 사용
+        // DbBackup4jInitializer.runFromClasspath("db-backup4j.yml");
+    }
+}
+```
+
+**Kotlin 버전:**
+```kotlin
+@Component
+class BackupRunner : ApplicationRunner {
+    override fun run(args: ApplicationArguments) {
+        DbBackup4jInitializer.run()
+    }
+}
+```
+
 ## ⚙️ 설정 파일 상세
 
 ### YAML 설정 예시 (db-backup4j.yaml)
 
 ```yaml
 database:
-  type: MYSQL          # MYSQL 또는 POSTGRESQL
-  host: localhost
-  port: 3306
-  name: myapp_db
+  # JDBC URL 방식 (권장) - 모든 JDBC 옵션 사용 가능
+  url: jdbc:mysql://localhost:3306/myapp_db?serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8
   username: backup_user
   password: backup_password
+  
+  # PostgreSQL 예시:
+  # url: jdbc:postgresql://localhost:5432/myapp_db?currentSchema=backup_schema
 
 backup:
   local:
@@ -116,15 +143,6 @@ backup:
     path: ./db-backup4j
     retention: 30        # 일 단위
     compress: true
-    
-  email:
-    enabled: false
-    smtp:
-      host: smtp.gmail.com
-      port: 587
-    username: backup@company.com
-    password: app-password
-    recipients: admin@company.com,dev@company.com
     
   s3:
     enabled: false
@@ -136,7 +154,7 @@ backup:
 
 schedule:
   enabled: false         # true면 스케줄러 시작, false면 1회 실행
-  daily: "0 0 * * *"     # cron 형식
+  cron: "0 0 * * *"      # cron 형식 (매일 자정)
 ```
 
 ### 설정 파일 자동 탐지 순서
@@ -154,7 +172,6 @@ schedule:
 
 ### 백업 저장소
 - **로컬 파일**: 압축 및 보존 기간 관리
-- **이메일**: SMTP를 통한 백업 파일 전송
 - **AWS S3**: S3 버킷에 백업 파일 업로드
 
 ### 스케줄링
