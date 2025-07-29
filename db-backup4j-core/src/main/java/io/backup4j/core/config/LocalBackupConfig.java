@@ -2,23 +2,19 @@ package io.backup4j.core.config;
 
 /**
  * 로컬 파일 시스템으로의 백업 설정을 관리하는 클래스입니다.
- * 백업 파일 저장 경로, 압축 여부, 보관 기간, 체크섬 검증 등을 설정합니다.
+ * 백업 파일 저장 경로, 압축 여부, 보관 기간 등을 설정합니다.
  */
 public class LocalBackupConfig {
     private final boolean enabled;
     private final String path;
     private final String retention;
     private final boolean compress;
-    private final boolean enableChecksum;
-    private final String checksumAlgorithm;
 
     private LocalBackupConfig(Builder builder) {
         this.enabled = builder.enabled;
         this.path = builder.path;
         this.retention = builder.retention;
         this.compress = builder.compress;
-        this.enableChecksum = builder.enableChecksum;
-        this.checksumAlgorithm = builder.checksumAlgorithm;
     }
 
     public static Builder builder() {
@@ -41,21 +37,12 @@ public class LocalBackupConfig {
         return compress;
     }
 
-    public boolean isEnableChecksum() {
-        return enableChecksum;
-    }
-
-    public String getChecksumAlgorithm() {
-        return checksumAlgorithm;
-    }
 
     public static class Builder {
         private boolean enabled = ConfigDefaults.DEFAULT_LOCAL_BACKUP_ENABLED;
         private String path = ConfigDefaults.DEFAULT_LOCAL_BACKUP_PATH;
         private String retention = ConfigDefaults.DEFAULT_LOCAL_BACKUP_RETENTION_DAYS;
         private boolean compress = ConfigDefaults.DEFAULT_LOCAL_BACKUP_COMPRESS;
-        private boolean enableChecksum = ConfigDefaults.DEFAULT_LOCAL_BACKUP_ENABLE_CHECKSUM;
-        private String checksumAlgorithm = ConfigDefaults.DEFAULT_LOCAL_BACKUP_CHECKSUM_ALGORITHM;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -77,15 +64,6 @@ public class LocalBackupConfig {
             return this;
         }
 
-        public Builder enableChecksum(boolean enableChecksum) {
-            this.enableChecksum = enableChecksum;
-            return this;
-        }
-
-        public Builder checksumAlgorithm(String checksumAlgorithm) {
-            this.checksumAlgorithm = checksumAlgorithm;
-            return this;
-        }
 
         public LocalBackupConfig build() {
             return new LocalBackupConfig(this);

@@ -11,8 +11,6 @@ public class S3BackupConfig {
     private final String region;
     private final String accessKey;
     private final String secretKey;
-    private final boolean enableChecksum;
-    private final String checksumAlgorithm;
 
     private S3BackupConfig(Builder builder) {
         this.enabled = builder.enabled;
@@ -21,8 +19,6 @@ public class S3BackupConfig {
         this.region = builder.region;
         this.accessKey = builder.accessKey;
         this.secretKey = builder.secretKey;
-        this.enableChecksum = builder.enableChecksum;
-        this.checksumAlgorithm = builder.checksumAlgorithm;
     }
 
     public static Builder builder() {
@@ -53,13 +49,6 @@ public class S3BackupConfig {
         return secretKey;
     }
 
-    public boolean isEnableChecksum() {
-        return enableChecksum;
-    }
-
-    public String getChecksumAlgorithm() {
-        return checksumAlgorithm;
-    }
 
     public static class Builder {
         private boolean enabled = ConfigDefaults.DEFAULT_S3_BACKUP_ENABLED;
@@ -68,8 +57,6 @@ public class S3BackupConfig {
         private String region = ConfigDefaults.DEFAULT_S3_REGION;
         private String accessKey;
         private String secretKey;
-        private boolean enableChecksum = ConfigDefaults.DEFAULT_S3_BACKUP_ENABLE_CHECKSUM;
-        private String checksumAlgorithm = ConfigDefaults.DEFAULT_S3_BACKUP_CHECKSUM_ALGORITHM;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -101,15 +88,6 @@ public class S3BackupConfig {
             return this;
         }
 
-        public Builder enableChecksum(boolean enableChecksum) {
-            this.enableChecksum = enableChecksum;
-            return this;
-        }
-
-        public Builder checksumAlgorithm(String checksumAlgorithm) {
-            this.checksumAlgorithm = checksumAlgorithm;
-            return this;
-        }
 
         public S3BackupConfig build() {
             return new S3BackupConfig(this);

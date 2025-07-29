@@ -3,10 +3,8 @@ package io.backup4j.core.validation;
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.DatabaseConfig;
 import io.backup4j.core.config.LocalBackupConfig;
-import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.config.S3BackupConfig;
 import io.backup4j.core.database.DatabaseBackupExecutor;
-import io.backup4j.core.database.DatabaseType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,7 +21,7 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 체크섬 검증이 통합된 백업 시스템의 통합 테스트
+ * 백업 파일 검증이 통합된 백업 시스템의 통합 테스트
  */
 @Testcontainers
 class BackupIntegrationTest {
@@ -43,11 +41,13 @@ class BackupIntegrationTest {
     @BeforeEach
     void setUp() throws SQLException {
         // 테스트용 백업 설정
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-                .type(DatabaseType.MYSQL)
-                .host(mysqlContainer.getHost())
-                .port(mysqlContainer.getFirstMappedPort())
-                .name(mysqlContainer.getDatabaseName())
+                .url(jdbcUrl)
                 .username(mysqlContainer.getUsername())
                 .password(mysqlContainer.getPassword())
                 .build();
@@ -57,230 +57,177 @@ class BackupIntegrationTest {
                 .path(tempDir.toString())
                 .retention("7")
                 .compress(false)
-                .enableChecksum(true)
-                .checksumAlgorithm("SHA256")
                 .build();
 
         config = BackupConfig.builder()
                 .database(databaseConfig)
                 .local(localConfig)
-                .notification(NotificationConfig.builder().enabled(false).build())
                 .s3(S3BackupConfig.builder().enabled(false).build())
                 .build();
 
         executor = new DatabaseBackupExecutor();
         
-        // 테스트 데이터 설정
-        setupTestData(databaseConfig);
+        // 테스트 데이터 준비
+        setupTestData();
     }
-    
-    private void setupTestData(DatabaseConfig config) throws SQLException {
-        try (Connection conn = io.backup4j.core.database.DatabaseConnection.getConnection(config);
+
+    private void setupTestData() throws SQLException {
+        try (Connection conn = io.backup4j.core.database.DatabaseConnection.getConnection(config.getDatabase());
              Statement stmt = conn.createStatement()) {
             
-            // 테이블 생성
-            stmt.execute("CREATE TABLE IF NOT EXISTS test_users (" +
-                "id INT PRIMARY KEY, " +
-                "name VARCHAR(50), " +
-                "email VARCHAR(100)" +
-                ")");
+            // 기존 테이블 삭제
+            stmt.execute("DROP TABLE IF EXISTS users");
+            
+            // 테스트 테이블 생성
+            stmt.execute("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100), email VARCHAR(100))");
             
             // 테스트 데이터 삽입
-            stmt.execute("TRUNCATE TABLE test_users");
-            stmt.execute("INSERT INTO test_users VALUES (1, 'John Doe', 'john@example.com')");
-            stmt.execute("INSERT INTO test_users VALUES (2, 'Jane Smith', 'jane@example.com')");
+            stmt.execute("INSERT INTO users VALUES (1, 'John Doe', 'john@example.com')");
+            stmt.execute("INSERT INTO users VALUES (2, 'Jane Smith', 'jane@example.com')");
         }
     }
 
     @Test
-    void executeBackup_체크섬활성화_성공적인백업결과() {
+    void executeBackup_정상실행_검증성공() {
         // When
         BackupResult result = executor.executeBackup(config);
 
         // Then
-        assertNotNull(result);
-        assertNotNull(result.getBackupId());
-        assertNotNull(result.getStartTime());
-        assertNotNull(result.getEndTime());
-        assertNotNull(result.getDuration());
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        assertFalse(result.hasErrors());
+        assertEquals(1, result.getFiles().size());
         assertTrue(result.getDuration().compareTo(Duration.ZERO) > 0);
 
-        // 백업 파일 확인
-        assertFalse(result.getFiles().isEmpty());
+        // 백업 파일 검증
         BackupResult.BackupFile backupFile = result.getFiles().get(0);
         assertNotNull(backupFile.getFilePath());
         assertTrue(backupFile.getFileSize() > 0);
         assertEquals("local", backupFile.getDestination());
-
-        // 체크섬 확인
-        if (config.getLocal().isEnableChecksum()) {
-            assertNotNull(backupFile.getChecksum());
-            assertEquals("SHA256", backupFile.getChecksum().getAlgorithm().toString());
-            assertNotNull(backupFile.getChecksum().getChecksum());
-            assertEquals(64, backupFile.getChecksum().getChecksum().length()); // SHA256 = 64 hex chars
-        }
-
+        
+        // BackupValidator를 통한 검증 결과 확인
+        assertNotNull(backupFile.getValidation());
+        assertTrue(backupFile.getValidation().isValid());
+        
         // 검증 결과 확인
-        if (config.getLocal().isEnableChecksum()) {
-            assertFalse(result.getValidationResults().isEmpty());
-            ChecksumValidator.ValidationResult validation = result.getValidationResults().get(0);
+        if (!result.getValidationResults().isEmpty()) {
+            BackupValidator.ValidationResult validation = result.getValidationResults().get(0);
             assertTrue(validation.isValid());
-            assertEquals(ChecksumValidator.ValidationStatus.VALID, validation.getStatus());
+            assertTrue(validation.getErrors().isEmpty());
         }
-
-        // 메타데이터 확인
-        assertNotNull(result.getMetadata());
-        assertEquals("MYSQL", result.getMetadata().getDatabaseType());
-        assertEquals("testdb", result.getMetadata().getDatabaseName());
-        assertEquals(mysqlContainer.getHost(), result.getMetadata().getDatabaseHost());
-        assertEquals("SQL", result.getMetadata().getBackupFormat());
     }
 
     @Test
-    void executeBackup_체크섬비활성화_체크섬없는백업() {
-        // Given - 체크섬 비활성화
-        LocalBackupConfig localConfigNoChecksum = LocalBackupConfig.builder()
+    void executeBackup_압축비활성화_정상백업() {
+        // Given
+        LocalBackupConfig localConfig = LocalBackupConfig.builder()
                 .enabled(true)
                 .path(tempDir.toString())
                 .retention("7")
                 .compress(false)
-                .enableChecksum(false)
                 .build();
 
-        BackupConfig configNoChecksum = BackupConfig.builder()
+        BackupConfig configWithoutCompression = BackupConfig.builder()
                 .database(config.getDatabase())
-                .local(localConfigNoChecksum)
-                .notification(config.getNotification())
-                .s3(config.getS3())
+                .local(localConfig)
+                .s3(S3BackupConfig.builder().enabled(false).build())
                 .build();
 
         // When
-        BackupResult result = executor.executeBackup(configNoChecksum);
+        BackupResult result = executor.executeBackup(configWithoutCompression);
 
         // Then
-        assertNotNull(result);
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        assertFalse(result.hasErrors());
         
-        // 백업 파일은 있지만 체크섬은 없어야 함
-        assertFalse(result.getFiles().isEmpty());
         BackupResult.BackupFile backupFile = result.getFiles().get(0);
-        assertNull(backupFile.getChecksum());
-
-        // 검증 결과도 없어야 함
-        assertTrue(result.getValidationResults().isEmpty());
+        assertNotNull(backupFile.getValidation());
+        assertTrue(backupFile.getValidation().isValid());
+        
+        // 파일명이 .sql로 끝나는지 확인 (압축되지 않음)
+        assertTrue(backupFile.getFilePath().toString().endsWith(".sql"));
     }
 
     @Test
-    void executeBackup_MD5알고리즘_MD5체크섬생성() {
-        // Given - MD5 알고리즘 설정
-        LocalBackupConfig localConfigMD5 = LocalBackupConfig.builder()
+    void executeBackup_압축활성화_정상백업() {
+        // Given
+        LocalBackupConfig localConfig = LocalBackupConfig.builder()
                 .enabled(true)
                 .path(tempDir.toString())
                 .retention("7")
-                .compress(false)
-                .enableChecksum(true)
-                .checksumAlgorithm("MD5")
+                .compress(true)
                 .build();
 
-        BackupConfig configMD5 = BackupConfig.builder()
+        BackupConfig configWithCompression = BackupConfig.builder()
                 .database(config.getDatabase())
-                .local(localConfigMD5)
-                .notification(config.getNotification())
-                .s3(config.getS3())
+                .local(localConfig)
+                .s3(S3BackupConfig.builder().enabled(false).build())
                 .build();
 
         // When
-        BackupResult result = executor.executeBackup(configMD5);
+        BackupResult result = executor.executeBackup(configWithCompression);
 
         // Then
-        assertNotNull(result);
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        assertFalse(result.hasErrors());
         
-        // MD5 체크섬 확인
-        assertFalse(result.getFiles().isEmpty());
         BackupResult.BackupFile backupFile = result.getFiles().get(0);
-        assertNotNull(backupFile.getChecksum());
-        assertEquals("MD5", backupFile.getChecksum().getAlgorithm().toString());
-        assertEquals(32, backupFile.getChecksum().getChecksum().length()); // MD5 = 32 hex chars
-    }
-
-    @Test
-    void backupResult_toString_정상출력() {
-        // When
-        BackupResult result = executor.executeBackup(config);
-
-        // Then
-        String toString = result.toString();
-        assertNotNull(toString);
-        assertTrue(toString.contains("BackupResult"));
-        assertTrue(toString.contains(result.getBackupId()));
-        assertTrue(toString.contains(result.getStatus().toString()));
-    }
-
-    @Test
-    void backupResult_다양한상태메서드_정상동작() {
-        // When
-        BackupResult result = executor.executeBackup(config);
-
-        // Then
-        // 성공적인 백업인 경우
-        if (result.getStatus() == BackupResult.Status.SUCCESS) {
-            assertTrue(result.isSuccess());
-            assertFalse(result.hasErrors());
-        }
-
-        // 검증 실패가 없는 경우
-        if (result.getValidationResults().stream().allMatch(ChecksumValidator.ValidationResult::isValid)) {
-            assertFalse(result.hasValidationFailures());
-        }
-    }
-
-    @Test
-    void backupFile_toString_정상출력() {
-        // When
-        BackupResult result = executor.executeBackup(config);
-
-        // Then
-        assertFalse(result.getFiles().isEmpty());
-        BackupResult.BackupFile backupFile = result.getFiles().get(0);
-        String toString = backupFile.toString();
+        assertNotNull(backupFile.getValidation());
+        assertTrue(backupFile.getValidation().isValid());
         
-        assertNotNull(toString);
-        assertTrue(toString.contains("BackupFile"));
-        assertTrue(toString.contains("local"));
-        assertTrue(toString.contains(String.valueOf(backupFile.getFileSize())));
+        // 파일명이 .gz로 끝나는지 확인 (압축됨)
+        assertTrue(backupFile.getFilePath().toString().endsWith(".gz"));
     }
 
     @Test
-    void backupMetadata_압축률계산_정상동작() {
+    void executeBackup_백업메타데이터_정상생성() {
         // When
         BackupResult result = executor.executeBackup(config);
 
         // Then
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        
         BackupResult.BackupMetadata metadata = result.getMetadata();
         assertNotNull(metadata);
-        
-        // 압축하지 않은 경우 압축률은 1.0
-        if (!metadata.isCompressed()) {
-            assertEquals(1.0, metadata.getCompressionRatio(), 0.01);
-        }
-        
-        String toString = metadata.toString();
-        assertTrue(toString.contains("BackupMetadata"));
-        assertTrue(toString.contains("MYSQL"));
-        assertTrue(toString.contains("testdb"));
+        assertEquals("MYSQL", metadata.getDatabaseType());
+        assertEquals("testdb", metadata.getDatabaseName());
+        assertFalse(metadata.isCompressed());
+        assertTrue(metadata.getOriginalSize() > 0);
+        assertEquals("SQL", metadata.getBackupFormat());
     }
 
     @Test
-    void 체크섬계산_성능측정_시간기록() {
+    void executeBackup_검증결과포함_확인() {
         // When
         BackupResult result = executor.executeBackup(config);
 
         // Then
-        if (config.getLocal().isEnableChecksum()) {
-            assertFalse(result.getValidationResults().isEmpty());
-            ChecksumValidator.ValidationResult validation = result.getValidationResults().get(0);
-            
-            assertTrue(validation.getValidationTimeMs() >= 0);
-            assertNotNull(validation.getValidatedAt());
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        assertFalse(result.hasValidationFailures());
+        
+        // 모든 검증 결과가 유효한지 확인
+        if (!result.getValidationResults().isEmpty()) {
+            assertTrue(result.getValidationResults().stream().allMatch(BackupValidator.ValidationResult::isValid));
         }
+    }
+
+    @Test
+    void executeBackup_파일크기확인() {
+        // When
+        BackupResult result = executor.executeBackup(config);
+
+        // Then
+        assertEquals(BackupResult.Status.SUCCESS, result.getStatus());
+        
+        // 메타데이터에서 파일 크기 확인
+        BackupResult.BackupMetadata metadata = result.getMetadata();
+        assertTrue(metadata.getOriginalSize() > 0);
+        
+        // 백업 파일에서 크기 확인
+        BackupResult.BackupFile backupFile = result.getFiles().get(0);
+        assertTrue(backupFile.getFileSize() > 0);
+        
+        // 검증 결과 확인
+        assertNotNull(backupFile.getValidation());
+        assertTrue(backupFile.getValidation().isValid());
     }
 }

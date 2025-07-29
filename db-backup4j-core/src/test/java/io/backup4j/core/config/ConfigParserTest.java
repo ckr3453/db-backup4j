@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.io.FileWriter;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,10 +29,7 @@ class ConfigParserTest {
     @Test
     void parseConfigFile_properties파일로_정상파싱() throws Exception {
         // given
-        String content = "database.type=MYSQL\n" +
-            "database.host=localhost\n" +
-            "database.port=3306\n" +
-            "database.name=testdb\n" +
+        String content = "database.url=jdbc:mysql://localhost:3306/testdb\n" +
             "database.username=user\n" +
             "database.password=pass\n" +
             "\n" +
@@ -40,7 +38,6 @@ class ConfigParserTest {
             "backup.local.retention=30\n" +
             "backup.local.compress=true\n" +
             "\n" +
-            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         
@@ -54,8 +51,6 @@ class ConfigParserTest {
         // then
         assertNotNull(config);
         assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
-        assertEquals("localhost", config.getDatabase().getHost());
-        assertEquals(3306, config.getDatabase().getPort());
         assertEquals("testdb", config.getDatabase().getName());
         assertEquals("user", config.getDatabase().getUsername());
         assertEquals("pass", config.getDatabase().getPassword());
@@ -65,7 +60,6 @@ class ConfigParserTest {
         assertEquals("30", config.getLocal().getRetention());
         assertTrue(config.getLocal().isCompress());
         
-        assertFalse(config.getNotification().isEnabled());
         assertFalse(config.getS3().isEnabled());
         assertFalse(config.getSchedule().isEnabled());
     }
@@ -74,10 +68,7 @@ class ConfigParserTest {
     void parseConfigFile_yaml파일로_정상파싱() throws Exception {
         // given
         String content = "database:\n" +
-            "  type: POSTGRESQL\n" +
-            "  host: localhost\n" +
-            "  port: 5432\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:postgresql://localhost:5432/testdb\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
@@ -87,8 +78,6 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  notification:\n" +
-            "    enabled: false\n" +
             "  s3:\n" +
             "    enabled: false\n" +
             "\n" +
@@ -105,8 +94,6 @@ class ConfigParserTest {
         // then
         assertNotNull(config);
         assertEquals(DatabaseType.POSTGRESQL, config.getDatabase().getType());
-        assertEquals("localhost", config.getDatabase().getHost());
-        assertEquals(5432, config.getDatabase().getPort());
         assertEquals("testdb", config.getDatabase().getName());
         assertEquals("user", config.getDatabase().getUsername());
         assertEquals("pass", config.getDatabase().getPassword());
@@ -116,7 +103,6 @@ class ConfigParserTest {
         assertEquals("30", config.getLocal().getRetention());
         assertTrue(config.getLocal().isCompress());
         
-        assertFalse(config.getNotification().isEnabled());
         assertFalse(config.getS3().isEnabled());
         assertFalse(config.getSchedule().isEnabled());
     }
@@ -133,16 +119,12 @@ class ConfigParserTest {
     }
 
     @Test
-    void parseConfigFile_잘못된데이터베이스타입으로_null처리() throws Exception {
+    void parseConfigFile_잘못된JDBCURL로_예외발생() throws Exception {
         // given
-        String content = "database.type=INVALID_TYPE\n" +
-            "database.host=localhost\n" +
-            "database.port=3306\n" +
-            "database.name=testdb\n" +
+        String content = "database.url=jdbc:invalidtype://localhost:3306/testdb\n" +
             "database.username=user\n" +
             "database.password=pass\n" +
             "backup.local.enabled=true\n" +
-            "backup.notification.enabled=false\n" +
             "backup.s3.enabled=false\n" +
             "schedule.enabled=false\n";
         
@@ -150,12 +132,10 @@ class ConfigParserTest {
             writer.write(content);
         }
         
-        // when
-        BackupConfig config = ConfigParser.parseConfigFile(propertiesFile.toString());
-        
-        // then - invalid type should be set to null and caught by validator
-        assertNotNull(config);
-        assertNull(config.getDatabase().getType());
+        // when & then - Invalid JDBC URL should throw during parsing
+        assertThrows(IllegalArgumentException.class, () -> {
+            ConfigParser.parseConfigFile(propertiesFile.toString());
+        });
     }
 
     @Test
@@ -165,16 +145,15 @@ class ConfigParserTest {
         IOException exception = assertThrows(IOException.class, 
             ConfigParser::autoDetectAndParse);
         assertTrue(exception.getMessage().contains("Configuration not found"));
+        // 클래스패스 검색이 포함되어야 함
+        assertTrue(exception.getMessage().contains("classpath paths"));
     }
 
     @Test
     void parseConfigFile_YAML복잡한중첩구조_정상파싱() throws Exception {
         // given - 실제 지원하는 구조로 수정
         String content = "database:\n" +
-            "  type: MYSQL\n" +
-            "  host: localhost\n" +
-            "  port: 3306\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
@@ -184,8 +163,6 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  notification:\n" +
-            "    enabled: false\n" +
             "  s3:\n" +
             "    enabled: false\n" +
             "\n" +
@@ -202,8 +179,6 @@ class ConfigParserTest {
         // then
         assertNotNull(config);
         assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
-        assertEquals("localhost", config.getDatabase().getHost());
-        assertEquals(3306, config.getDatabase().getPort());
         assertEquals("user", config.getDatabase().getUsername());
         assertEquals("pass", config.getDatabase().getPassword());
         assertEquals("testdb", config.getDatabase().getName());
@@ -219,10 +194,7 @@ class ConfigParserTest {
         // given
         String content = "# Database configuration\n" +
             "database:\n" +
-            "  type: MYSQL  # Database type\n" +
-            "  host: localhost  # Database host\n" +
-            "  port: 3306\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb  # JDBC URL\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
@@ -233,8 +205,6 @@ class ConfigParserTest {
             "    path: /backup\n" +
             "    retention: 30\n" +
             "    compress: true\n" +
-            "  notification:\n" +
-            "    enabled: false  # Disable notification\n" +
             "  s3:\n" +
             "    enabled: false\n" +
             "\n" +
@@ -251,18 +221,15 @@ class ConfigParserTest {
         // then
         assertNotNull(config);
         assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
-        assertEquals("localhost", config.getDatabase().getHost());
         assertTrue(config.getLocal().isEnabled());
-        assertFalse(config.getNotification().isEnabled());
     }
 
     @Test
     void parseConfigFile_YAML잘못된형식_예외발생() throws Exception {
         // given
         String content = "database:\n" +
-            "  type: MYSQL\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb\n" +
             "  host localhost  # 콜론 누락\n" +
-            "  port: 3306\n" +
             "invalid_yaml_structure\n";
         
         try (FileWriter writer = new FileWriter(yamlFile.toFile())) {
@@ -281,10 +248,7 @@ class ConfigParserTest {
     void parseConfigFile_YAML빈값처리_기본값사용() throws Exception {
         // given
         String content = "database:\n" +
-            "  type: MYSQL\n" +
-            "  host:  # 빈 값\n" +
-            "  port: 3306\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
@@ -304,7 +268,7 @@ class ConfigParserTest {
         
         // then
         assertNotNull(config);
-        assertEquals("localhost", config.getDatabase().getHost()); // 기본값
+        assertEquals("testdb", config.getDatabase().getName());
         assertEquals("./db-backup4j", config.getLocal().getPath()); // 기본값
         assertEquals("30", config.getLocal().getRetention()); // 기본값
     }
@@ -313,10 +277,7 @@ class ConfigParserTest {
     void parseConfigFile_YAML타입불일치_적절한처리() throws Exception {
         // given
         String content = "database:\n" +
-            "  type: MYSQL\n" +
-            "  host: localhost\n" +
-            "  port: \"not_a_number\"  # 문자열 포트\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
@@ -336,27 +297,16 @@ class ConfigParserTest {
         
         // then
         assertNotNull(config);
-        assertEquals(0, config.getDatabase().getPort()); // 잘못된 포트는 0으로 설정
+        assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
         assertFalse(config.getLocal().isEnabled()); // 잘못된 boolean은 false로 설정
     }
 
     @Test
-    void parseFromEnvironment_환경변수파싱_정상동작() {
-        // when - 실제 환경변수가 없는 경우 테스트
-        BackupConfig config = ConfigParser.parseFromEnvironment();
-        
-        // then - 환경변수가 없으므로 기본값들이 설정됨
-        assertNotNull(config);
-        assertNotNull(config.getDatabase());
-        assertNotNull(config.getLocal());
-        assertNotNull(config.getNotification());
-        assertNotNull(config.getS3());
-        assertNotNull(config.getSchedule());
-        
-        // 기본값 확인
-        assertEquals("localhost", config.getDatabase().getHost());
-        assertTrue(config.getLocal().isEnabled());
-        assertEquals("./db-backup4j", config.getLocal().getPath());
+    void parseFromEnvironment_환경변수없음으로_예외발생() {
+        // when & then - 환경변수가 없으면 필수 데이터베이스 설정 누락으로 예외 발생
+        assertThrows(IllegalArgumentException.class, () -> {
+            ConfigParser.parseFromEnvironment();
+        });
     }
 
     @Test
@@ -374,29 +324,16 @@ class ConfigParserTest {
     }
 
     @Test
-    void parseConfigFile_YAML리스트처리_정상파싱() throws Exception {
+    void parseConfigFile_YAML기본설정_정상파싱() throws Exception {
         // given
         String content = "database:\n" +
-            "  type: MYSQL\n" +
-            "  host: localhost\n" +
-            "  port: 3306\n" +
-            "  name: testdb\n" +
+            "  url: jdbc:mysql://localhost:3306/testdb\n" +
             "  username: user\n" +
             "  password: pass\n" +
             "\n" +
             "backup:\n" +
-            "  notification:\n" +
-            "    enabled: true\n" +
-            "    email:\n" +
-            "      enabled: true\n" +
-            "      recipients: \"user1@example.com,user2@example.com\"\n" +
-            "      username: sender@example.com\n" +
-            "      password: emailpass\n" +
-            "      smtp:\n" +
-            "        host: smtp.example.com\n" +
-            "        port: 587\n" +
             "  local:\n" +
-            "    enabled: false\n" +
+            "    enabled: true\n" +
             "  s3:\n" +
             "    enabled: false\n";
         
@@ -409,26 +346,17 @@ class ConfigParserTest {
         
         // then
         assertNotNull(config);
-        assertTrue(config.getNotification().isEnabled());
-        assertTrue(config.getNotification().getEmail().isEnabled());
-        assertEquals("sender@example.com", config.getNotification().getEmail().getUsername());
-        assertEquals("emailpass", config.getNotification().getEmail().getPassword());
-        assertEquals("smtp.example.com", config.getNotification().getEmail().getSmtp().getHost());
-        assertEquals(587, config.getNotification().getEmail().getSmtp().getPort());
-        assertNotNull(config.getNotification().getEmail().getRecipients());
-        assertEquals(2, config.getNotification().getEmail().getRecipients().size());
+        assertTrue(config.getLocal().isEnabled());
+        assertFalse(config.getS3().isEnabled());
     }
 
     @Test
-    void parseConfigFile_properties숫자형식오류_기본값사용() throws Exception {
+    void parseConfigFile_properties기본설정_정상파싱() throws Exception {
         // given
-        String content = "database.type=MYSQL\n" +
-            "database.host=localhost\n" +
-            "database.port=invalid_port\n" +
-            "database.name=testdb\n" +
+        String content = "database.url=jdbc:mysql://localhost:3306/testdb\n" +
             "database.username=user\n" +
             "database.password=pass\n" +
-            "backup.notification.email.smtp.port=invalid_smtp_port\n";
+            "backup.local.enabled=true\n";
         
         try (FileWriter writer = new FileWriter(propertiesFile.toFile())) {
             writer.write(content);
@@ -439,7 +367,53 @@ class ConfigParserTest {
         
         // then
         assertNotNull(config);
-        assertEquals(0, config.getDatabase().getPort()); // 잘못된 포트는 0으로 설정
-        assertEquals(0, config.getNotification().getEmail().getSmtp().getPort()); // 잘못된 SMTP 포트는 0으로 설정
+        assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
+        assertTrue(config.getLocal().isEnabled());
+    }
+
+    @Test
+    void autoDetectAndParse_클래스패스에서_자동감지() throws Exception {
+        // given - 클래스패스에 설정 파일이 있는 경우는 실제 테스트 리소스 폴더에 파일이 있어야 함
+        // 이 테스트는 실제로는 파일이 없으므로 예외가 발생하는 것을 확인
+        
+        // when & then
+        IOException exception = assertThrows(IOException.class, 
+            ConfigParser::autoDetectAndParse);
+        assertTrue(exception.getMessage().contains("Configuration not found"));
+        assertTrue(exception.getMessage().contains("classpath paths"));
+        // 클래스패스 경로들이 포함되어야 함
+        assertTrue(exception.getMessage().contains("db-backup4j.properties"));
+        assertTrue(exception.getMessage().contains("db-backup4j.yaml"));
+        assertTrue(exception.getMessage().contains("db-backup4j.yml"));
+    }
+
+    @Test
+    void autoDetectAndParse_환경변수_우선순위_확인() throws Exception {
+        // given - 환경변수가 없는 상태에서 파일 우선순위 확인
+        // 프로젝트 루트에 실제 파일을 만들어서 테스트
+        Path rootPropertiesFile = Paths.get("./db-backup4j.properties");
+        String content = "database.url=jdbc:mysql://localhost:3306/testdb\n" +
+            "database.username=user\n" +
+            "database.password=pass\n";
+        
+        try {
+            try (FileWriter writer = new FileWriter(rootPropertiesFile.toFile())) {
+                writer.write(content);
+            }
+            
+            // when
+            BackupConfig config = ConfigParser.autoDetectAndParse();
+            
+            // then
+            assertNotNull(config);
+            assertEquals(DatabaseType.MYSQL, config.getDatabase().getType());
+            assertEquals("testdb", config.getDatabase().getName());
+            
+        } finally {
+            // cleanup
+            if (rootPropertiesFile.toFile().exists()) {
+                rootPropertiesFile.toFile().delete();
+            }
+        }
     }
 }

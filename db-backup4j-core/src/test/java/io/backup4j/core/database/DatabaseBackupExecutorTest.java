@@ -3,7 +3,6 @@ package io.backup4j.core.database;
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.DatabaseConfig;
 import io.backup4j.core.config.LocalBackupConfig;
-import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.config.S3BackupConfig;
 import io.backup4j.core.validation.BackupResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,11 +52,11 @@ class DatabaseBackupExecutorTest {
     @Test
     void executeBackup_MySQL_실제데이터베이스백업() throws Exception {
         // given - MySQL 컨테이너 설정
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+            mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -72,7 +71,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
@@ -101,11 +99,11 @@ class DatabaseBackupExecutorTest {
     @Test
     void executeBackup_PostgreSQL_실제데이터베이스백업() throws Exception {
         // given - PostgreSQL 컨테이너 설정
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+            postgresContainer.getHost(), postgresContainer.getFirstMappedPort(), postgresContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.POSTGRESQL)
-            .host(postgresContainer.getHost())
-            .port(postgresContainer.getFirstMappedPort())
-            .name(postgresContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(postgresContainer.getUsername())
             .password(postgresContainer.getPassword())
             .build();
@@ -120,7 +118,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
@@ -147,11 +144,11 @@ class DatabaseBackupExecutorTest {
     @Test
     void executeBackup_MySQL_NULL값과특수문자처리() throws Exception {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+            mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -166,7 +163,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
@@ -191,11 +187,11 @@ class DatabaseBackupExecutorTest {
         // given - 존재하지 않는 디렉토리 경로
         Path newDir = tempDir.resolve("new-backup-directory");
         
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+            mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -210,7 +206,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
@@ -232,10 +227,7 @@ class DatabaseBackupExecutorTest {
     void executeBackup_잘못된연결정보_예외발생() {
         // given - 잘못된 연결 정보
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host("invalid-host")
-            .port(9999)
-            .name("invalid-db")
+            .url("jdbc:mysql://invalid-host:9999/invalid-db")
             .username("invalid-user")
             .password("invalid-pass")
             .build();
@@ -250,7 +242,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 
@@ -270,11 +261,11 @@ class DatabaseBackupExecutorTest {
     @Test
     void executeBackup_읽기전용디렉토리_예외발생() throws Exception {
         // given - 읽기 전용 디렉토리 (시뮬레이션을 위해 불가능한 경로 사용)
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+            mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
+        
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -289,7 +280,6 @@ class DatabaseBackupExecutorTest {
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
-            .notification(NotificationConfig.builder().enabled(false).build())
             .s3(S3BackupConfig.builder().enabled(false).build())
             .build();
 

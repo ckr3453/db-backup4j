@@ -2,12 +2,10 @@ package io.backup4j.core.database;
 
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.validation.BackupResult;
-import io.backup4j.core.validation.ChecksumValidator;
-import io.backup4j.core.validation.ZeroCopyChecksumCalculator;
+import io.backup4j.core.validation.BackupValidator;
 import io.backup4j.core.util.CompressionUtils;
 import io.backup4j.core.util.BackupFileNameGenerator;
 import io.backup4j.core.util.RetentionPolicy;
-import io.backup4j.core.notification.NotificationService;
 import io.backup4j.core.util.SqlUtils;
 import io.backup4j.core.util.Constants;
 import io.backup4j.core.util.S3Utils;
@@ -18,14 +16,12 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 /**
  * 데이터베이스 백업을 실행하는 클래스
  * 설정에 따라 MySQL, PostgreSQL 데이터베이스를 백업하고 압축, 체크섬 검증, 파일 정리 등을 수행함
  */
 public class DatabaseBackupExecutor {
-    private static final Logger logger = Logger.getLogger(DatabaseBackupExecutor.class.getName());
     
     /**
      * 백업 실행 메서드
@@ -40,7 +36,6 @@ public class DatabaseBackupExecutor {
             .backupId(backupId)
             .startTime(startTime);
             
-        logger.info(String.format("Starting database backup process... ID: %s", backupId));
         
         try {
             // 1. 데이터베이스 백업 실행
@@ -56,11 +51,11 @@ public class DatabaseBackupExecutor {
             CompressionResult compressionResult = processCompression(config, backupFile, resultBuilder);
             File finalBackupFile = compressionResult.getFinalFile();
             
-            // 4. 체크섬 계산
-            ChecksumValidator.StoredChecksum checksum = calculateChecksum(config, finalBackupFile, resultBuilder);
+            // 4. 백업 파일 검증
+            BackupValidator.ValidationResult validation = validateBackupFile(finalBackupFile, resultBuilder);
             
             // 5. 백업 파일 정보 생성
-            BackupResult.BackupFile backupFileInfo = createBackupFileInfo(finalBackupFile, checksum);
+            BackupResult.BackupFile backupFileInfo = createBackupFileInfo(finalBackupFile, validation);
             resultBuilder.addFile(backupFileInfo);
             
             // 6. 보존 정책 적용
@@ -74,13 +69,9 @@ public class DatabaseBackupExecutor {
             // 8. 메타데이터 생성 및 결과 빌드
             BackupResult result = buildFinalResult(config, originalSize, finalBackupFile, resultBuilder);
             
-            // 9. 알림 전송
-            sendNotification(result, config);
-            
             return result;
                 
         } catch (Exception e) {
-            logger.severe("Unexpected error during backup: " + e.getMessage());
             return handleUnexpectedError(e, resultBuilder, config);
         }
     }
@@ -108,7 +99,6 @@ public class DatabaseBackupExecutor {
                 writer.flush();
                 originalSize = backupFile.length();
                 
-                logger.info("Database backup completed successfully: " + backupFile.getAbsolutePath());
                 
                 return new DatabaseBackupResult(backupFile, originalSize);
                 
@@ -118,9 +108,7 @@ public class DatabaseBackupExecutor {
                 // 디스크 공간 부족 감지
                 if (isDiskSpaceError(e)) {
                     errorMessage = "Insufficient disk space for backup: " + e.getMessage();
-                    logger.severe("Disk space error during backup: " + e.getMessage());
                 } else {
-                    logger.severe("Database backup failed: " + e.getMessage());
                 }
                 
                 resultBuilder.addError(new BackupResult.BackupError(
@@ -137,7 +125,6 @@ public class DatabaseBackupExecutor {
             }
             
         } catch (Exception e) {
-            logger.severe("Unexpected error during database backup: " + e.getMessage());
             resultBuilder.addError(new BackupResult.BackupError(
                 "database", 
                 "Unexpected database backup error: " + e.getMessage(), 
@@ -167,13 +154,10 @@ public class DatabaseBackupExecutor {
                 
                 // 원본 파일 삭제
                 if (!backupFile.delete()) {
-                    logger.warning("Failed to delete original backup file: " + backupFile.getAbsolutePath());
                 }
                 
-                logger.info("Backup file compressed: " + compressionMetrics);
                 
             } catch (Exception e) {
-                logger.warning("Compression failed: " + e.getMessage());
                 resultBuilder.addError(new BackupResult.BackupError(
                     "compression", 
                     "Compression failed: " + e.getMessage(), 
@@ -187,46 +171,52 @@ public class DatabaseBackupExecutor {
     }
     
     /**
-     * 체크섬 계산
+     * 백업 파일 검증
      */
-    private ChecksumValidator.StoredChecksum calculateChecksum(BackupConfig config, File backupFile, BackupResult.Builder resultBuilder) {
-        ChecksumValidator.StoredChecksum checksum = null;
-        
-        if (config.getLocal().isEnableChecksum()) {
-            try {
-                ZeroCopyChecksumCalculator.Algorithm algorithm = 
-                    ZeroCopyChecksumCalculator.Algorithm.valueOf(config.getLocal().getChecksumAlgorithm().toUpperCase());
-                checksum = ChecksumValidator.calculateAndStore(backupFile.toPath(), algorithm);
-                
-                // 체크섬 검증
-                ChecksumValidator.ValidationResult validation = checksum.validateAgainstFile(backupFile.toPath());
-                resultBuilder.addValidationResult(validation);
-                
-                logger.info("Checksum calculated: " + checksum.getChecksum() + " (" + algorithm + ")");
-                
-            } catch (Exception e) {
-                logger.warning("Checksum calculation failed: " + e.getMessage());
+    private BackupValidator.ValidationResult validateBackupFile(File backupFile, BackupResult.Builder resultBuilder) {
+        try {
+            BackupValidator.ValidationResult validation = BackupValidator.validateBackupFile(backupFile);
+            resultBuilder.addValidationResult(validation);
+            
+            if (!validation.isValid()) {
                 resultBuilder.addError(new BackupResult.BackupError(
-                    "checksum", 
-                    "Checksum calculation failed: " + e.getMessage(), 
-                    e, 
+                    "validation", 
+                    "Backup file validation failed: " + String.join(", ", validation.getErrors()), 
+                    null, 
                     LocalDateTime.now()
                 ));
             }
+            
+            return validation;
+            
+        } catch (Exception e) {
+            BackupValidator.ValidationResult failedValidation = BackupValidator.ValidationResult.builder()
+                .filePath(backupFile.getAbsolutePath())
+                .valid(false)
+                .addError("Validation process failed: " + e.getMessage())
+                .build();
+                
+            resultBuilder.addValidationResult(failedValidation);
+            resultBuilder.addError(new BackupResult.BackupError(
+                "validation", 
+                "Backup file validation process failed: " + e.getMessage(), 
+                e, 
+                LocalDateTime.now()
+            ));
+            
+            return failedValidation;
         }
-        
-        return checksum;
     }
     
     /**
      * 백업 파일 정보 생성
      */
-    private BackupResult.BackupFile createBackupFileInfo(File backupFile, ChecksumValidator.StoredChecksum checksum) {
+    private BackupResult.BackupFile createBackupFileInfo(File backupFile, BackupValidator.ValidationResult validation) {
         return new BackupResult.BackupFile(
             backupFile.toPath(),
             backupFile.length(),
             "local",
-            checksum,
+            validation,
             LocalDateTime.now()
         );
     }
@@ -243,12 +233,9 @@ public class DatabaseBackupExecutor {
                     RetentionPolicy.CleanupResult cleanupResult = RetentionPolicy.cleanup(retentionDirectory, retentionDays, false);
                     
                     int keptFiles = cleanupResult.getTotalFiles() - cleanupResult.getDeletedFiles();
-                    logger.info("Retention policy applied: " + cleanupResult.getDeletedFiles() + " old files deleted, " + 
-                               keptFiles + " files kept");
                     
                     if (cleanupResult.hasErrors()) {
                         for (String error : cleanupResult.getErrors()) {
-                            logger.warning("Retention policy error: " + error);
                             resultBuilder.addError(new BackupResult.BackupError(
                                 "retention",
                                 "Retention policy error: " + error,
@@ -259,7 +246,6 @@ public class DatabaseBackupExecutor {
                     }
                 }
             } catch (NumberFormatException e) {
-                logger.warning("Invalid retention value: " + config.getLocal().getRetention());
                 resultBuilder.addError(new BackupResult.BackupError(
                     "retention",
                     "Invalid retention value: " + config.getLocal().getRetention(),
@@ -267,7 +253,6 @@ public class DatabaseBackupExecutor {
                     LocalDateTime.now()
                 ));
             } catch (Exception e) {
-                logger.warning("Retention policy execution failed: " + e.getMessage());
                 resultBuilder.addError(new BackupResult.BackupError(
                     "retention",
                     "Retention policy execution failed: " + e.getMessage(),
@@ -316,8 +301,6 @@ public class DatabaseBackupExecutor {
             .status(BackupResult.Status.FAILED)
             .build();
         
-        // 실패 알림 전송
-        sendNotification(result, config);
         
         return result;
     }
@@ -445,7 +428,6 @@ public class DatabaseBackupExecutor {
     private void backupTable(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
             throws SQLException, IOException {
         
-        logger.info("Backing up table: " + tableName);
         
         // 테이블 구조 백업
         backupTableStructure(connection, writer, tableName, dbType);
@@ -618,11 +600,9 @@ public class DatabaseBackupExecutor {
         
         S3BackupConfig s3Config = config.getS3();
         if (!s3Config.isEnabled()) {
-            logger.info("S3 backup is disabled");
             return;
         }
         
-        logger.info("Starting S3 backup for file: " + backupFile.getName());
         
         try {
             // S3 객체 키 생성 (접두어 + 파일명)
@@ -633,16 +613,10 @@ public class DatabaseBackupExecutor {
             // S3 업로드 실행
             S3Utils.uploadFile(backupFile, s3Config, objectKey);
             
-            // 체크섬 검증 (설정된 경우)
-            if (s3Config.isEnableChecksum()) {
-                validateS3Upload(backupFile, s3Config, resultBuilder);
-            }
             
-            logger.info("S3 backup completed successfully: s3://" + s3Config.getBucket() + "/" + objectKey);
             
         } catch (IOException e) {
             String errorMessage = "S3 backup failed: " + e.getMessage();
-            logger.severe(errorMessage);
             
             resultBuilder.addError(new BackupResult.BackupError(
                 "s3", 
@@ -656,36 +630,6 @@ public class DatabaseBackupExecutor {
         }
     }
     
-    /**
-     * S3 업로드 후 체크섬 검증
-     */
-    private void validateS3Upload(File localFile, S3BackupConfig s3Config, 
-                                 BackupResult.Builder resultBuilder) {
-        try {
-            // 로컬 파일 체크섬 계산
-            ZeroCopyChecksumCalculator.Algorithm algorithm = 
-                "MD5".equalsIgnoreCase(s3Config.getChecksumAlgorithm()) ? 
-                ZeroCopyChecksumCalculator.Algorithm.MD5 : 
-                ZeroCopyChecksumCalculator.Algorithm.SHA256;
-                
-            ChecksumValidator.StoredChecksum localChecksum = ChecksumValidator.calculateAndStore(
-                localFile.toPath(), algorithm);
-            
-            // 실제 환경에서는 S3 객체의 ETag나 메타데이터로 검증
-            // 여기서는 로컬 체크섬만 기록
-            logger.info("S3 upload checksum (" + s3Config.getChecksumAlgorithm() + "): " + 
-                       localChecksum.getChecksum());
-            
-        } catch (Exception e) {
-            logger.warning("S3 checksum validation failed: " + e.getMessage());
-            resultBuilder.addError(new BackupResult.BackupError(
-                "s3-checksum", 
-                "S3 checksum validation failed: " + e.getMessage(), 
-                e, 
-                LocalDateTime.now()
-            ));
-        }
-    }
     
     /**
      * 디스크 공간 부족 오류인지 확인
@@ -702,22 +646,5 @@ public class DatabaseBackupExecutor {
                lowerMessage.contains("disk full") ||
                lowerMessage.contains("insufficient disk space") ||
                e instanceof java.nio.file.FileSystemException;
-    }
-    
-    /**
-     * 백업 완료 후 알림을 전송합니다
-     */
-    private void sendNotification(BackupResult result, BackupConfig config) {
-        if (config.getNotification() == null || !config.getNotification().isEnabled()) {
-            return;
-        }
-        
-        try {
-            NotificationService notificationService = new NotificationService();
-            notificationService.sendBackupNotification(result, config.getNotification());
-            notificationService.shutdown();
-        } catch (Exception e) {
-            logger.warning("Notification sending failed: " + e.getMessage());
-        }
     }
 }

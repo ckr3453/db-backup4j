@@ -15,7 +15,6 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.logging.Logger;
 
 /**
  * AWS S3 백업을 위한 유틸리티 클래스
@@ -23,7 +22,6 @@ import java.util.logging.Logger;
  */
 public class S3Utils {
     
-    private static final Logger logger = Logger.getLogger(S3Utils.class.getName());
     
     private static final String AWS_ALGORITHM = "AWS4-HMAC-SHA256";
     private static final String AWS_REQUEST = "aws4_request";
@@ -45,7 +43,6 @@ public class S3Utils {
             throw new FileNotFoundException("Backup file not found: " + file.getAbsolutePath());
         }
         
-        logger.info("Starting S3 upload: " + objectKey + " to bucket " + config.getBucket());
         
         String endpoint = String.format("https://%s.s3.%s.amazonaws.com/%s", 
             config.getBucket(), config.getRegion(), objectKey);
@@ -97,8 +94,6 @@ public class S3Utils {
                     // 진행률 로깅 (10MB마다)
                     if (uploadedBytes % (10 * 1024 * 1024) == 0) {
                         double progress = (double) uploadedBytes / file.length() * 100;
-                        logger.info(String.format("Upload progress: %.1f%% (%d/%d bytes)", 
-                            progress, uploadedBytes, file.length()));
                     }
                 }
                 
@@ -108,7 +103,6 @@ public class S3Utils {
             // 응답 확인
             int responseCode = connection.getResponseCode();
             if (responseCode >= 200 && responseCode < 300) {
-                logger.info("S3 upload completed successfully. Response code: " + responseCode);
             } else {
                 String errorResponse = readErrorResponse(connection);
                 throw new IOException("S3 upload failed. Response code: " + responseCode + 

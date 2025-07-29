@@ -1,18 +1,17 @@
 package io.backup4j.core.config;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
 /**
  * 백업 설정의 유효성을 검증하는 클래스입니다.
- * 데이터베이스, 로컬 백업, 알림 설정, S3 백업, 스케줄 설정의 유효성을 검사합니다.
+ * 데이터베이스, 로컬 백업, S3 백업, 스케줄 설정의 유효성을 검사합니다.
  */
 public class ConfigValidator {
     
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(
-        "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$"
-    );
     
     
     /**
@@ -31,7 +30,6 @@ public class ConfigValidator {
         
         validateDatabase(config.getDatabase(), errors);
         validateLocalBackup(config.getLocal(), errors);
-        validateNotification(config.getNotification(), errors);
         validateS3(config.getS3(), errors);
         validateSchedule(config.getSchedule(), errors);
         
@@ -50,20 +48,23 @@ public class ConfigValidator {
             return;
         }
         
-        if (db.getType() == null) {
-            errors.add("Database type is required");
+        if (isEmpty(db.getUrl())) {
+            errors.add("Required property 'database.url' is missing");
+            return;
         }
         
-        if (isEmpty(db.getHost())) {
-            errors.add("Database host is required");
-        }
-        
-        if (db.getPort() < ConfigDefaults.MIN_PORT || db.getPort() > ConfigDefaults.MAX_PORT) {
-            errors.add("Database port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT);
-        }
-        
-        if (isEmpty(db.getName())) {
-            errors.add("Required property 'database.name' is missing");
+        // JDBC URL 형식 검증
+        try {
+            String url = db.getUrl();
+            if (!url.startsWith("jdbc:")) {
+                errors.add("Database URL must start with 'jdbc:'");
+            }
+            
+            // URL 자체의 유효성 검증은 DatabaseConfig 생성 시 이미 수행됨
+            // 여기서는 추가 검증만 수행
+            
+        } catch (Exception e) {
+            errors.add("Invalid database URL format: " + e.getMessage());
         }
         
         if (isEmpty(db.getUsername())) {
@@ -95,98 +96,8 @@ public class ConfigValidator {
         }
     }
     
-    /**
-     * 알림 설정을 검증합니다.
-     * 
-     * @param notification 알림 설정
-     * @param errors 오류 메시지 목록
-     */
-    private static void validateNotification(NotificationConfig notification, List<String> errors) {
-        if (notification == null || !notification.isEnabled()) {
-            return;
-        }
-        
-        // 이메일 알림 검증
-        validateEmailNotification(notification.getEmail(), errors);
-        
-        // 웹훅 알림 검증
-        validateWebhookNotification(notification.getWebhook(), errors);
-        
-        // 최소 하나의 알림 방법이 활성화되어야 함
-        if (!notification.hasEnabledNotifiers()) {
-            errors.add("At least one notification method (email or webhook) must be enabled when notifications are enabled");
-        }
-    }
     
-    /**
-     * 이메일 알림 설정을 검증합니다.
-     * 
-     * @param email 이메일 알림 설정
-     * @param errors 오류 메시지 목록
-     */
-    private static void validateEmailNotification(NotificationConfig.EmailConfig email, List<String> errors) {
-        if (email == null || !email.isEnabled()) {
-            return;
-        }
-        
-        if (email.getSmtp() == null) {
-            errors.add("SMTP configuration is required when email notifications are enabled");
-        } else {
-            if (isEmpty(email.getSmtp().getHost())) {
-                errors.add("Required property 'notification.email.smtp.host' is missing when email notifications are enabled");
-            }
-            
-            if (email.getSmtp().getPort() < ConfigDefaults.MIN_PORT || email.getSmtp().getPort() > ConfigDefaults.MAX_PORT) {
-                errors.add("SMTP port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT);
-            }
-        }
-        
-        if (isEmpty(email.getUsername())) {
-            errors.add("Required property 'notification.email.username' is missing when email notifications are enabled");
-        }
-        
-        if (isEmpty(email.getPassword())) {
-            errors.add("Required property 'notification.email.password' is missing when email notifications are enabled");
-        }
-        
-        if (email.getRecipients() == null || email.getRecipients().isEmpty()) {
-            errors.add("Required property 'notification.email.recipients' is missing when email notifications are enabled");
-        } else {
-            for (String recipient : email.getRecipients()) {
-                if (!EMAIL_PATTERN.matcher(recipient.trim()).matches()) {
-                    errors.add("Invalid email format: " + recipient);
-                }
-            }
-        }
-    }
     
-    /**
-     * 웹훅 알림 설정을 검증합니다.
-     * 
-     * @param webhook 웹훅 알림 설정
-     * @param errors 오류 메시지 목록
-     */
-    private static void validateWebhookNotification(NotificationConfig.WebhookConfig webhook, List<String> errors) {
-        if (webhook == null || !webhook.isEnabled()) {
-            return;
-        }
-        
-        if (isEmpty(webhook.getUrl())) {
-            errors.add("Required property 'notification.webhook.url' is missing when webhook notifications are enabled");
-        } else {
-            if (!isValidUrl(webhook.getUrl())) {
-                errors.add("Invalid webhook URL format: " + webhook.getUrl());
-            }
-        }
-        
-        if (webhook.getTimeout() <= 0) {
-            errors.add("Webhook timeout must be greater than 0 seconds");
-        }
-        
-        if (webhook.getRetryCount() < 0) {
-            errors.add("Webhook retry count must be 0 or greater");
-        }
-    }
     
     /**
      * S3 백업 설정을 검증합니다.
@@ -261,10 +172,10 @@ public class ConfigValidator {
      */
     private static boolean isValidUrl(String url) {
         try {
-            java.net.URL urlObj = new java.net.URL(url);
+            URL urlObj = new URL(url);
             String protocol = urlObj.getProtocol();
             return "http".equals(protocol) || "https".equals(protocol);
-        } catch (java.net.MalformedURLException e) {
+        } catch (MalformedURLException e) {
             return false;
         }
     }

@@ -1,6 +1,5 @@
 package io.backup4j.core.config;
 
-import io.backup4j.core.database.DatabaseType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,7 +25,6 @@ class ConfigValidatorTest {
         BackupConfig config = BackupConfig.builder()
             .database(null)
             .local(LocalBackupConfig.builder().build())
-            .notification(NotificationConfig.builder().build())
             .s3(S3BackupConfig.builder().build())
             .schedule(ScheduleConfig.builder().build())
             .build();
@@ -40,55 +38,27 @@ class ConfigValidatorTest {
     }
 
     @Test
-    void validate_데이터베이스호스트비어있음으로_예외발생() {
-        // given
-        BackupConfig config = BackupConfig.builder()
-            .database(DatabaseConfig.builder()
-                .type(DatabaseType.MYSQL)
-                .host("")  // Empty host
-                .port(3306)
-                .name("testdb")
+    void validate_데이터베이스URL비어있음으로_예외발생() {
+        // given & when & then - Empty URL should throw during DatabaseConfig creation
+        assertThrows(IllegalArgumentException.class, () -> {
+            DatabaseConfig.builder()
+                .url("")  // Empty URL
                 .username("user")
                 .password("pass")
-                .build())
-            .local(LocalBackupConfig.builder().enabled(false).build())
-            .notification(NotificationConfig.builder().enabled(false).build())
-            .s3(S3BackupConfig.builder().enabled(false).build())
-            .schedule(ScheduleConfig.builder().enabled(false).build())
-            .build();
-        
-        // when
-        ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
-        
-        // then
-        assertFalse(result.isValid());
-        assertTrue(result.getErrors().contains("Database host is required"));
+                .build();
+        });
     }
 
     @Test
-    void validate_데이터베이스포트범위초과로_예외발생() {
-        // given
-        BackupConfig config = BackupConfig.builder()
-            .database(DatabaseConfig.builder()
-                .type(DatabaseType.MYSQL)
-                .host("localhost")
-                .port(0)  // Invalid port
-                .name("testdb")
+    void validate_잘못된JDBCURL로_예외발생() {
+        // given & when & then - Invalid JDBC URL should throw during DatabaseConfig creation
+        assertThrows(IllegalArgumentException.class, () -> {
+            DatabaseConfig.builder()
+                .url("invalid-url")  // Invalid JDBC URL
                 .username("user")
                 .password("pass")
-                .build())
-            .local(LocalBackupConfig.builder().enabled(false).build())
-            .notification(NotificationConfig.builder().enabled(false).build())
-            .s3(S3BackupConfig.builder().enabled(false).build())
-            .schedule(ScheduleConfig.builder().enabled(false).build())
-            .build();
-        
-        // when
-        ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
-        
-        // then
-        assertFalse(result.isValid());
-        assertTrue(result.getErrors().contains("Database port must be between " + ConfigDefaults.MIN_PORT + " and " + ConfigDefaults.MAX_PORT));
+                .build();
+        });
     }
 
     @Test
@@ -107,17 +77,11 @@ class ConfigValidatorTest {
     private BackupConfig createValidConfig() {
         return BackupConfig.builder()
             .database(DatabaseConfig.builder()
-                .type(DatabaseType.MYSQL)
-                .host("localhost")
-                .port(3306)
-                .name("testdb")
+                .url("jdbc:mysql://localhost:3306/testdb")
                 .username("user")
                 .password("pass")
                 .build())
             .local(LocalBackupConfig.builder()
-                .enabled(false)
-                .build())
-            .notification(NotificationConfig.builder()
                 .enabled(false)
                 .build())
             .s3(S3BackupConfig.builder()

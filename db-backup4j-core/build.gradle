@@ -1,10 +1,18 @@
 dependencies {
-    implementation 'mysql:mysql-connector-java:8.0.33'
-    implementation 'org.postgresql:postgresql:42.7.3'
-    implementation 'org.yaml:snakeyaml:2.0'
-    implementation 'com.cronutils:cron-utils:9.2.0'
-    implementation 'com.zaxxer:HikariCP:4.0.3'
-    
+    compileOnly('mysql:mysql-connector-java:8.0.33') {
+        exclude group: 'com.google.protobuf'
+    }
+    compileOnly('org.postgresql:postgresql:42.7.3') {
+        exclude group: 'org.checkerframework'
+    }
+
+    testRuntimeOnly('mysql:mysql-connector-java:8.0.33') {
+        exclude group: 'com.google.protobuf'
+    }
+    testRuntimeOnly('org.postgresql:postgresql:42.7.3') {
+        exclude group: 'org.checkerframework'
+    }
+
     testImplementation 'org.mockito:mockito-inline:5.2.0'
     testImplementation 'org.testcontainers:testcontainers:1.19.8'
     testImplementation 'org.testcontainers:mysql:1.19.8'

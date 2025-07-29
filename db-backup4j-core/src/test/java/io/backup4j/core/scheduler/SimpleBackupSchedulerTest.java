@@ -4,9 +4,7 @@ import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.DatabaseConfig;
 import io.backup4j.core.config.LocalBackupConfig;
 import io.backup4j.core.config.ScheduleConfig;
-import io.backup4j.core.config.NotificationConfig;
 import io.backup4j.core.config.S3BackupConfig;
-import io.backup4j.core.database.DatabaseType;
 import io.backup4j.core.exception.SchedulerStartException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,10 +24,7 @@ class SimpleBackupSchedulerTest {
     void setUp() {
         // 기본 설정 구성
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
-                .type(DatabaseType.MYSQL)
-                .host("localhost")
-                .port(3306)
-                .name("test_db")
+                .url("jdbc:mysql://localhost:3306/test_db")
                 .username("test")
                 .password("test")
                 .build();
@@ -44,7 +39,6 @@ class SimpleBackupSchedulerTest {
         config = BackupConfig.builder()
                 .database(databaseConfig)
                 .local(localConfig)
-                .notification(NotificationConfig.builder().build())
                 .s3(S3BackupConfig.builder().build())
                 .build();
     }
@@ -76,7 +70,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -113,7 +106,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -138,7 +130,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -163,7 +154,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -188,7 +178,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -214,7 +203,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -261,7 +249,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -289,7 +276,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -315,7 +301,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();
@@ -342,7 +327,6 @@ class SimpleBackupSchedulerTest {
         BackupConfig configWithSchedule = BackupConfig.builder()
                 .database(config.getDatabase())
                 .local(config.getLocal())
-                .notification(config.getNotification())
                 .s3(config.getS3())
                 .schedule(scheduleConfig)
                 .build();

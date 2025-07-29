@@ -27,7 +27,7 @@ public class BackupResult {
     private final BackupMetadata metadata;
     private final List<BackupFile> files;
     private final List<BackupError> errors;
-    private final List<ChecksumValidator.ValidationResult> validationResults;
+    private final List<BackupValidator.ValidationResult> validationResults;
     
     private BackupResult(Builder builder) {
         this.backupId = builder.backupId;
@@ -54,7 +54,7 @@ public class BackupResult {
     public BackupMetadata getMetadata() { return metadata; }
     public List<BackupFile> getFiles() { return files; }
     public List<BackupError> getErrors() { return errors; }
-    public List<ChecksumValidator.ValidationResult> getValidationResults() { return validationResults; }
+    public List<BackupValidator.ValidationResult> getValidationResults() { return validationResults; }
     
     public boolean isSuccess() {
         return status == Status.SUCCESS;
@@ -75,22 +75,22 @@ public class BackupResult {
         private final Path filePath;
         private final long fileSize;
         private final String destination; // local, email, s3
-        private final ChecksumValidator.StoredChecksum checksum;
+        private final BackupValidator.ValidationResult validation;
         private final LocalDateTime createdAt;
         
         public BackupFile(Path filePath, long fileSize, String destination, 
-                         ChecksumValidator.StoredChecksum checksum, LocalDateTime createdAt) {
+                         BackupValidator.ValidationResult validation, LocalDateTime createdAt) {
             this.filePath = filePath;
             this.fileSize = fileSize;
             this.destination = destination;
-            this.checksum = checksum;
+            this.validation = validation;
             this.createdAt = createdAt;
         }
         
         public Path getFilePath() { return filePath; }
         public long getFileSize() { return fileSize; }
         public String getDestination() { return destination; }
-        public ChecksumValidator.StoredChecksum getChecksum() { return checksum; }
+        public BackupValidator.ValidationResult getValidation() { return validation; }
         public LocalDateTime getCreatedAt() { return createdAt; }
         
         @Override
@@ -183,7 +183,7 @@ public class BackupResult {
         private BackupMetadata metadata;
         private List<BackupFile> files = new ArrayList<>();
         private List<BackupError> errors = new ArrayList<>();
-        private List<ChecksumValidator.ValidationResult> validationResults = new ArrayList<>();
+        private List<BackupValidator.ValidationResult> validationResults = new ArrayList<>();
         
         public Builder backupId(String backupId) { this.backupId = backupId; return this; }
         public Builder status(Status status) { this.status = status; return this; }
@@ -202,7 +202,7 @@ public class BackupResult {
             return this; 
         }
         
-        public Builder addValidationResult(ChecksumValidator.ValidationResult result) {
+        public Builder addValidationResult(BackupValidator.ValidationResult result) {
             this.validationResults.add(result);
             return this;
         }

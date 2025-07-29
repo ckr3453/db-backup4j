@@ -16,19 +16,11 @@ public final class ConfigDefaults {
     public static final String DEFAULT_LOCAL_BACKUP_PATH = "./db-backup4j";
     public static final String DEFAULT_LOCAL_BACKUP_RETENTION_DAYS = "30";
     public static final boolean DEFAULT_LOCAL_BACKUP_COMPRESS = true;
-    public static final boolean DEFAULT_LOCAL_BACKUP_ENABLE_CHECKSUM = true;
-    public static final String DEFAULT_LOCAL_BACKUP_CHECKSUM_ALGORITHM = "SHA256";
-    
-    // 이메일 백업 기본값
-    public static final boolean DEFAULT_EMAIL_BACKUP_ENABLED = false;
-    public static final int DEFAULT_SMTP_PORT = 587;
     
     // S3 백업 기본값
     public static final boolean DEFAULT_S3_BACKUP_ENABLED = false;
     public static final String DEFAULT_S3_PREFIX = "db-backup4j";
     public static final String DEFAULT_S3_REGION = "ap-northeast-2";
-    public static final boolean DEFAULT_S3_BACKUP_ENABLE_CHECKSUM = true;
-    public static final String DEFAULT_S3_BACKUP_CHECKSUM_ALGORITHM = "SHA256";
     
     // 스케줄 기본값
     public static final boolean DEFAULT_SCHEDULE_ENABLED = false;

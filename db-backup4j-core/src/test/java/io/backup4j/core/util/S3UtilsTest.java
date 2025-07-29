@@ -34,8 +34,6 @@ class S3UtilsTest {
             .region("us-east-1")
             .accessKey("test-access-key")
             .secretKey("test-secret-key")
-            .enableChecksum(true)
-            .checksumAlgorithm("SHA256")
             .build();
         
         // 테스트용 파일 생성
@@ -106,7 +104,5 @@ class S3UtilsTest {
         assertEquals("us-east-1", s3Config.getRegion());
         assertEquals("test-access-key", s3Config.getAccessKey());
         assertEquals("test-secret-key", s3Config.getSecretKey());
-        assertTrue(s3Config.isEnableChecksum());
-        assertEquals("SHA256", s3Config.getChecksumAlgorithm());
     }
 }

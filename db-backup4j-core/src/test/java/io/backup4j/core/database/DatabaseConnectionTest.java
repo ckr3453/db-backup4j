@@ -30,11 +30,12 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_MySQL_실제연결성공() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -54,11 +55,12 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_PostgreSQL_실제연결성공() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                postgresContainer.getHost(),
+                postgresContainer.getFirstMappedPort(),
+                postgresContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.POSTGRESQL)
-            .host(postgresContainer.getHost())
-            .port(postgresContainer.getFirstMappedPort())
-            .name(postgresContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(postgresContainer.getUsername())
             .password(postgresContainer.getPassword())
             .build();
@@ -78,17 +80,18 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_MySQL_잘못된자격증명_연결실패() {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username("wronguser")
             .password("wrongpass")
             .build();
 
-        // when & then - 커넥션 풀 예외 또는 SQL 예외 모두 허용
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        // when & then - SQL 예외 발생 확인
+        SQLException exception = assertThrows(SQLException.class, () -> {
             DatabaseConnection.getConnection(config);
         });
         
@@ -100,17 +103,18 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_PostgreSQL_잘못된자격증명_연결실패() {
         // given
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                postgresContainer.getHost(),
+                postgresContainer.getFirstMappedPort(),
+                postgresContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.POSTGRESQL)
-            .host(postgresContainer.getHost())
-            .port(postgresContainer.getFirstMappedPort())
-            .name(postgresContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username("wronguser")
             .password("wrongpass")
             .build();
 
-        // when & then - 커넥션 풀 예외 또는 SQL 예외 모두 허용
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        // when & then - SQL 예외 발생 확인
+        SQLException exception = assertThrows(SQLException.class, () -> {
             DatabaseConnection.getConnection(config);
         });
         
@@ -127,17 +131,18 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_MySQL_잘못된데이터베이스_연결실패() {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                "nonexistentdb");
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name("nonexistentdb")
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
 
         // when & then - 존재하지 않는 DB 연결 시 예외 발생
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        SQLException exception = assertThrows(SQLException.class, () -> {
             DatabaseConnection.getConnection(config);
         });
         
@@ -149,17 +154,18 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_PostgreSQL_잘못된데이터베이스_연결실패() {
         // given
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                postgresContainer.getHost(),
+                postgresContainer.getFirstMappedPort(),
+                "nonexistentdb");
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.POSTGRESQL)
-            .host(postgresContainer.getHost())
-            .port(postgresContainer.getFirstMappedPort())
-            .name("nonexistentdb")
+            .url(jdbcUrl)
             .username(postgresContainer.getUsername())
             .password(postgresContainer.getPassword())
             .build();
 
-        // when & then - 커넥션 풀 예외 또는 SQL 예외 모두 허용
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        // when & then - SQL 예외 발생 확인
+        SQLException exception = assertThrows(SQLException.class, () -> {
             DatabaseConnection.getConnection(config);
         });
         
@@ -176,11 +182,12 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_MySQL_연결속성검증() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -201,11 +208,12 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_PostgreSQL_연결속성검증() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                postgresContainer.getHost(),
+                postgresContainer.getFirstMappedPort(),
+                postgresContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.POSTGRESQL)
-            .host(postgresContainer.getHost())
-            .port(postgresContainer.getFirstMappedPort())
-            .name(postgresContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(postgresContainer.getUsername())
             .password(postgresContainer.getPassword())
             .build();
@@ -224,11 +232,12 @@ class DatabaseConnectionTest {
     @Test
     void getConnection_MySQL_복수연결처리() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
@@ -255,11 +264,12 @@ class DatabaseConnectionTest {
     @Test
     void closeConnection_실제연결_정상종료() throws SQLException {
         // given
+        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
+                mysqlContainer.getHost(),
+                mysqlContainer.getFirstMappedPort(),
+                mysqlContainer.getDatabaseName());
         DatabaseConfig config = DatabaseConfig.builder()
-            .type(DatabaseType.MYSQL)
-            .host(mysqlContainer.getHost())
-            .port(mysqlContainer.getFirstMappedPort())
-            .name(mysqlContainer.getDatabaseName())
+            .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();

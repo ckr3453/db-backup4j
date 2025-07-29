@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,7 +21,6 @@ import java.util.stream.Stream;
  */
 public class RetentionPolicy {
     
-    private static final Logger logger = Logger.getLogger(RetentionPolicy.class.getName());
     
     /**
      * 시간 공급자 인터페이스 - 테스트 시 모킹 가능
@@ -136,8 +134,6 @@ public class RetentionPolicy {
      * @return 정리 결과
      */
     public static CleanupResult cleanup(Path backupDirectory, int retentionDays, boolean dryRun) {
-        logger.info("Starting backup cleanup in directory: " + backupDirectory + 
-                   ", retention: " + retentionDays + " days, dryRun: " + dryRun);
         
         List<String> deletedFilePaths = new ArrayList<>();
         List<String> errors = new ArrayList<>();
@@ -147,7 +143,6 @@ public class RetentionPolicy {
         
         if (!Files.exists(backupDirectory) || !Files.isDirectory(backupDirectory)) {
             String error = "Backup directory does not exist or is not a directory: " + backupDirectory;
-            logger.warning(error);
             errors.add(error);
             return new CleanupResult(0, 0, 0, deletedFilePaths, errors);
         }
@@ -155,7 +150,6 @@ public class RetentionPolicy {
         try {
             // 현재 시간에서 보존 기간을 뺀 임계점 계산
             Instant cutoffTime = timeProvider.now().minusSeconds(retentionDays * 24 * 60 * 60L);
-            logger.info("Cutoff time for cleanup: " + cutoffTime);
             
             // 백업 파일 패턴으로 필터링 (*.sql, *.sql.gz)
             try (Stream<Path> files = Files.walk(backupDirectory, 1)) {
@@ -165,7 +159,6 @@ public class RetentionPolicy {
                     .collect(Collectors.toList());
                 
                 totalFiles = backupFiles.size();
-                logger.info("Found " + totalFiles + " backup files");
                 
                 // 파일 생성 시간을 기준으로 정리 대상 파일 선별
                 for (Path file : backupFiles) {
@@ -177,27 +170,23 @@ public class RetentionPolicy {
                             long fileSize = attrs.size();
                             
                             if (dryRun) {
-                                logger.info("[DRY RUN] Would delete: " + file + " (size: " + fileSize + " bytes)");
                                 deletedFilePaths.add(file.toString());
                                 deletedFiles++;
                                 freedSpace += fileSize;
                             } else {
                                 try {
                                     Files.delete(file);
-                                    logger.info("Deleted backup file: " + file + " (size: " + fileSize + " bytes)");
                                     deletedFilePaths.add(file.toString());
                                     deletedFiles++;
                                     freedSpace += fileSize;
                                 } catch (IOException e) {
                                     String error = "Failed to delete file: " + file + " - " + e.getMessage();
-                                    logger.warning(error);
                                     errors.add(error);
                                 }
                             }
                         }
                     } catch (IOException e) {
                         String error = "Failed to read file attributes: " + file + " - " + e.getMessage();
-                        logger.warning(error);
                         errors.add(error);
                     }
                 }
@@ -205,14 +194,10 @@ public class RetentionPolicy {
             
         } catch (IOException e) {
             String error = "Failed to scan backup directory: " + e.getMessage();
-            logger.severe(error);
             errors.add(error);
         }
         
-        CleanupResult result = new CleanupResult(totalFiles, deletedFiles, freedSpace, deletedFilePaths, errors);
-        logger.info("Cleanup completed: " + result);
-        
-        return result;
+        return new CleanupResult(totalFiles, deletedFiles, freedSpace, deletedFilePaths, errors);
     }
     
     /**
@@ -239,7 +224,6 @@ public class RetentionPolicy {
         List<BackupFileInfo> backupFiles = new ArrayList<>();
         
         if (!Files.exists(backupDirectory) || !Files.isDirectory(backupDirectory)) {
-            logger.warning("Backup directory does not exist: " + backupDirectory);
             return backupFiles;
         }
         
@@ -257,7 +241,6 @@ public class RetentionPolicy {
                             attrs.lastModifiedTime().toInstant()
                         );
                     } catch (IOException e) {
-                        logger.warning("Failed to read file attributes: " + path + " - " + e.getMessage());
                         return null;
                     }
                 })
@@ -266,7 +249,6 @@ public class RetentionPolicy {
                 .collect(Collectors.toList());
                 
         } catch (IOException e) {
-            logger.severe("Failed to list backup files: " + e.getMessage());
         }
         
         return backupFiles;

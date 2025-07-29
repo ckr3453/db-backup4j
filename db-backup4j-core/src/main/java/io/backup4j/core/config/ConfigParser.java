@@ -1,15 +1,9 @@
 package io.backup4j.core.config;
 
-import io.backup4j.core.database.DatabaseType;
-import io.backup4j.core.notification.WebhookChannel;
-import org.yaml.snakeyaml.Yaml;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.io.File;
@@ -95,7 +89,31 @@ public class ConfigParser {
             return parseFromEnvironment();
         }
         
-        // 2. 프로젝트 루트에서 설정 파일 확인
+        // 2. 클래스패스에서 설정 파일 확인 (Spring Boot 스타일)
+        String[] classpathPaths = {
+            "db-backup4j.properties",
+            "db-backup4j.yaml", 
+            "db-backup4j.yml"
+        };
+        
+        for (String resourcePath : classpathPaths) {
+            try (InputStream is = ConfigParser.class.getClassLoader().getResourceAsStream(resourcePath)) {
+                if (is != null) {
+                    if (resourcePath.endsWith(".properties")) {
+                        Properties props = new Properties();
+                        props.load(is);
+                        return mapPropertiesToConfig(props);
+                    } else {
+                        Properties props = parseYamlToProperties(is);
+                        return mapPropertiesToConfig(props);
+                    }
+                }
+            } catch (IOException e) {
+                // 클래스패스에서 읽기 실패해도 계속 진행
+            }
+        }
+        
+        // 3. 프로젝트 루트에서 설정 파일 확인
         String[] defaultPaths = {
             "./db-backup4j.properties",
             "./db-backup4j.yaml",
@@ -109,7 +127,7 @@ public class ConfigParser {
             }
         }
         
-        // 3. configLocation 파라미터 확인
+        // 4. configLocation 파라미터 확인
         if (configLocation != null && !configLocation.trim().isEmpty()) {
             File configFile = new File(configLocation);
             if (configFile.exists() && configFile.isFile()) {
@@ -117,10 +135,11 @@ public class ConfigParser {
             }
         }
         
-        // 4. 모든 경로에서 파일을 찾지 못한 경우
+        // 5. 모든 경로에서 파일을 찾지 못한 경우
         throw new IOException(
-            "Configuration not found. Searched: environment variables, file paths: "
-                + String.join(", ", defaultPaths)
+            "Configuration not found. Searched: environment variables, classpath paths: "
+                + String.join(", ", classpathPaths)
+                + ", file paths: " + String.join(", ", defaultPaths)
                 + (configLocation != null ? ", " + configLocation : "")
         );
     }
@@ -164,7 +183,6 @@ public class ConfigParser {
         return BackupConfig.builder()
             .database(mapDatabaseConfig(props))
             .local(mapLocalBackupConfig(props))
-            .notification(mapNotificationConfig(props))
             .s3(mapS3Config(props))
             .schedule(mapScheduleConfig(props))
             .build();
@@ -174,29 +192,14 @@ public class ConfigParser {
     private static DatabaseConfig mapDatabaseConfig(Properties props) {
         DatabaseConfig.Builder builder = DatabaseConfig.builder();
         
-        String typeStr = props.getProperty("database.type");
-        if (typeStr != null) {
-            try {
-                DatabaseType type = DatabaseType.fromString(typeStr);
-                builder.type(type);
-            } catch (IllegalArgumentException e) {
-                // 잘못된 타입은 null로 설정하고 나중에 validator에서 검증
-                builder.type(null);
-            }
-        }
+        // JDBC URL 방식으로 변경
+        String url = props.getProperty("database.url");
+        String username = props.getProperty("database.username");
+        String password = props.getProperty("database.password");
         
-        builder.host(props.getProperty("database.host", ConfigDefaults.DEFAULT_DATABASE_HOST));
-        
-        String portStr = props.getProperty("database.port", String.valueOf(ConfigDefaults.DEFAULT_MYSQL_PORT));
-        try {
-            builder.port(Integer.parseInt(portStr));
-        } catch (NumberFormatException e) {
-            builder.port(0); // 잘못된 포트는 0으로 설정
-        }
-        
-        builder.name(props.getProperty("database.name"));
-        builder.username(props.getProperty("database.username"));
-        builder.password(props.getProperty("database.password"));
+        builder.url(url);
+        builder.username(username);
+        builder.password(password);
         
         return builder.build();
     }
@@ -207,67 +210,9 @@ public class ConfigParser {
             .path(props.getProperty("backup.local.path", ConfigDefaults.DEFAULT_LOCAL_BACKUP_PATH))
             .retention(props.getProperty("backup.local.retention", ConfigDefaults.DEFAULT_LOCAL_BACKUP_RETENTION_DAYS))
             .compress(Boolean.parseBoolean(props.getProperty("backup.local.compress", String.valueOf(ConfigDefaults.DEFAULT_LOCAL_BACKUP_COMPRESS))))
-            .enableChecksum(Boolean.parseBoolean(props.getProperty("backup.local.checksum.enabled", String.valueOf(ConfigDefaults.DEFAULT_LOCAL_BACKUP_ENABLE_CHECKSUM))))
-            .checksumAlgorithm(props.getProperty("backup.local.checksum.algorithm", ConfigDefaults.DEFAULT_LOCAL_BACKUP_CHECKSUM_ALGORITHM))
             .build();
     }
 
-    private static NotificationConfig mapNotificationConfig(Properties props) {
-        boolean enabled = Boolean.parseBoolean(props.getProperty("backup.notification.enabled", String.valueOf(ConfigDefaults.DEFAULT_NOTIFICATION_ENABLED)));
-        
-        // 이메일 설정
-        NotificationConfig.EmailConfig.Builder emailBuilder = NotificationConfig.EmailConfig.builder()
-            .enabled(Boolean.parseBoolean(props.getProperty("backup.notification.email.enabled", String.valueOf(ConfigDefaults.DEFAULT_EMAIL_ENABLED))))
-            .username(props.getProperty("backup.notification.email.username"))
-            .password(props.getProperty("backup.notification.email.password"))
-            .subject(props.getProperty("backup.notification.email.subject", ConfigDefaults.DEFAULT_EMAIL_SUBJECT));
-        
-        String recipients = props.getProperty("backup.notification.email.recipients");
-        if (recipients != null) {
-            List<String> recipientList = Arrays.asList(recipients.split(","));
-            emailBuilder.recipients(recipientList);
-        }
-        
-        // SMTP 설정
-        NotificationConfig.SmtpConfig.Builder smtpBuilder = NotificationConfig.SmtpConfig.builder()
-            .host(props.getProperty("backup.notification.email.smtp.host"))
-            .useTls(Boolean.parseBoolean(props.getProperty("backup.notification.email.smtp.tls", String.valueOf(ConfigDefaults.DEFAULT_SMTP_TLS))))
-            .useAuth(Boolean.parseBoolean(props.getProperty("backup.notification.email.smtp.auth", String.valueOf(ConfigDefaults.DEFAULT_SMTP_AUTH))));
-        
-        String smtpPortStr = props.getProperty("backup.notification.email.smtp.port", String.valueOf(ConfigDefaults.DEFAULT_SMTP_PORT));
-        try {
-            smtpBuilder.port(Integer.parseInt(smtpPortStr));
-        } catch (NumberFormatException e) {
-            smtpBuilder.port(0); // 잘못된 포트는 0으로 설정
-        }
-        
-        emailBuilder.smtp(smtpBuilder.build());
-        
-        // 웹훅 설정
-        NotificationConfig.WebhookConfig.Builder webhookBuilder = NotificationConfig.WebhookConfig.builder()
-            .enabled(Boolean.parseBoolean(props.getProperty("backup.notification.webhook.enabled", String.valueOf(ConfigDefaults.DEFAULT_WEBHOOK_ENABLED))))
-            .url(props.getProperty("backup.notification.webhook.url"))
-            .useRichFormat(Boolean.parseBoolean(props.getProperty("backup.notification.webhook.rich-format", String.valueOf(ConfigDefaults.DEFAULT_WEBHOOK_RICH_FORMAT))))
-            .timeout(Integer.parseInt(props.getProperty("backup.notification.webhook.timeout", String.valueOf(ConfigDefaults.DEFAULT_WEBHOOK_TIMEOUT))))
-            .retryCount(Integer.parseInt(props.getProperty("backup.notification.webhook.retry-count", String.valueOf(ConfigDefaults.DEFAULT_WEBHOOK_RETRY_COUNT))));
-        
-        // 웹훅 채널 설정
-        String channelStr = props.getProperty("backup.notification.webhook.channel");
-        if (channelStr != null && !channelStr.trim().isEmpty()) {
-            try {
-                webhookBuilder.channel(WebhookChannel.valueOf(channelStr.toUpperCase()));
-            } catch (IllegalArgumentException e) {
-                // 잘못된 채널은 null로 설정 (자동 감지)
-                webhookBuilder.channel(null);
-            }
-        }
-        
-        return NotificationConfig.builder()
-            .enabled(enabled)
-            .email(emailBuilder.build())
-            .webhook(webhookBuilder.build())
-            .build();
-    }
 
     private static S3BackupConfig mapS3Config(Properties props) {
         return S3BackupConfig.builder()
@@ -277,8 +222,6 @@ public class ConfigParser {
             .region(props.getProperty("backup.s3.region", ConfigDefaults.DEFAULT_S3_REGION))
             .accessKey(props.getProperty("backup.s3.access-key"))
             .secretKey(props.getProperty("backup.s3.secret-key"))
-            .enableChecksum(Boolean.parseBoolean(props.getProperty("backup.s3.checksum.enabled", String.valueOf(ConfigDefaults.DEFAULT_S3_BACKUP_ENABLE_CHECKSUM))))
-            .checksumAlgorithm(props.getProperty("backup.s3.checksum.algorithm", ConfigDefaults.DEFAULT_S3_BACKUP_CHECKSUM_ALGORITHM))
             .build();
     }
 
@@ -300,9 +243,7 @@ public class ConfigParser {
         Properties properties = new Properties();
         
         try {
-            Yaml yaml = new Yaml();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> data = yaml.load(inputStream);
+            Map<String, Object> data = SimpleYamlParser.parse(inputStream);
             
             if (data != null) {
                 flattenMap(data, "", properties);
