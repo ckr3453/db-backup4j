@@ -128,7 +128,7 @@ class BackupValidatorTest {
         File noSqlFile = tempDir.resolve("no_sql_content.sql").toFile();
         try (FileWriter writer = new FileWriter(noSqlFile)) {
             writer.write("This file has no SQL content\n");
-            writer.write("Just some text without CREATE TABLE or INSERT\n");
+            writer.write("Just some text without any database commands\n");
             writer.write("No actual database statements here\n");
         }
 
