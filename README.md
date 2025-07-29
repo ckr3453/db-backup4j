@@ -166,10 +166,6 @@ schedule:
 
 ## 📋 지원 기능
 
-### 데이터베이스
-- **MYSQL**: mysqldump 사용
-- **POSTGRESQL**: pg_dump 사용
-
 ### 백업 저장소
 - **로컬 파일**: 압축 및 보존 기간 관리
 - **AWS S3**: S3 버킷에 백업 파일 업로드
@@ -182,9 +178,6 @@ schedule:
 
 ### 요구사항
 - **Java**: JDK 8 이상
-- **데이터베이스 도구**: 
-  - MySQL: `mysqldump` 명령어 사용 가능
-  - PostgreSQL: `pg_dump` 명령어 사용 가능
 
 ### 빌드 및 테스트
 
@@ -198,36 +191,6 @@ cd db-backup4j
 
 # 테스트 실행
 ./gradlew test
-```
-
-## 🎯 사용 사례
-
-### Spring Boot 애플리케이션
-```java
-@SpringBootApplication
-public class MySpringBootApp {
-    public static void main(String[] args) {
-        SpringApplication.run(MySpringBootApp.class, args);
-        
-        // 애플리케이션 시작 후 db-backup4j 실행
-        DbBackup4jInitializer.run();
-    }
-}
-```
-
-### 배치 작업
-```java
-public class BackupBatchJob {
-    public static void main(String[] args) {
-        try {
-            DbBackup4jInitializer.run("config/prod-backup.properties");
-            System.out.println("Backup completed successfully");
-        } catch (Exception e) {
-            System.err.println("Backup failed: " + e.getMessage());
-            System.exit(1);
-        }
-    }
-}
 ```
 
 ## 📄 라이선스
