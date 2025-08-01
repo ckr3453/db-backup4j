@@ -1,19 +1,19 @@
-package io.backup4j.core.config;
+package io.backup4j.core.util;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+import io.backup4j.core.config.*;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * 백업 설정의 유효성을 검증하는 클래스입니다.
  * 데이터베이스, 로컬 백업, S3 백업, 스케줄 설정의 유효성을 검사합니다.
  */
 public class ConfigValidator {
-    
-    
-    
+
+    private ConfigValidator(){
+    }
+
     /**
      * 백업 설정 전체의 유효성을 검증합니다.
      * 
@@ -96,9 +96,6 @@ public class ConfigValidator {
         }
     }
     
-    
-    
-    
     /**
      * S3 백업 설정을 검증합니다.
      * 
@@ -162,22 +159,6 @@ public class ConfigValidator {
      */
     private static boolean isValidRetention(String retention) {
         return retention.matches("\\d+");
-    }
-    
-    /**
-     * URL 형식이 유효한지 검사합니다.
-     * 
-     * @param url 검사할 URL
-     * @return 유효한 URL 형식이면 true, 그렇지 않으면 false
-     */
-    private static boolean isValidUrl(String url) {
-        try {
-            URL urlObj = new URL(url);
-            String protocol = urlObj.getProtocol();
-            return "http".equals(protocol) || "https".equals(protocol);
-        } catch (MalformedURLException e) {
-            return false;
-        }
     }
     
     /**
