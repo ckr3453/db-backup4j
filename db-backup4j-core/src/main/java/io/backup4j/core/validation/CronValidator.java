@@ -1,4 +1,4 @@
-package io.backup4j.core.util;
+package io.backup4j.core.validation;
 
 import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinition;

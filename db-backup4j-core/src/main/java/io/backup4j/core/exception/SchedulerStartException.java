@@ -12,8 +12,4 @@ public class SchedulerStartException extends Exception {
     public SchedulerStartException(String message, Throwable cause) {
         super(message, cause);
     }
-    
-    public SchedulerStartException(Throwable cause) {
-        super(cause);
-    }
 }

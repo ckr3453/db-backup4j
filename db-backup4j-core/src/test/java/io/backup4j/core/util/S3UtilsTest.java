@@ -23,6 +23,7 @@ class S3UtilsTest {
     
     private S3BackupConfig s3Config;
     private File testFile;
+    private S3Utils s3Utils;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -41,6 +42,9 @@ class S3UtilsTest {
         try (FileWriter writer = new FileWriter(testFile)) {
             writer.write("-- Test backup file\nCREATE TABLE test (id INT);\n");
         }
+        
+        // S3Utils 인스턴스 생성
+        s3Utils = new S3Utils(s3Config);
     }
 
     @Test
@@ -50,7 +54,7 @@ class S3UtilsTest {
         
         // When & Then
         IOException exception = assertThrows(IOException.class, 
-            () -> S3Utils.uploadFile(nonExistentFile, s3Config, "test-key"));
+            () -> new S3Utils(s3Config).uploadFile(nonExistentFile, "test-key"));
         
         assertTrue(exception.getMessage().contains("Backup file not found"));
     }
@@ -63,7 +67,7 @@ class S3UtilsTest {
         // When & Then
         // 실제 S3가 없으므로 연결 에러가 발생할 것임
         assertThrows(IOException.class, 
-            () -> S3Utils.uploadFile(testFile, s3Config, objectKey));
+            () -> s3Utils.uploadFile(testFile, objectKey));
     }
 
     @Test
@@ -79,7 +83,7 @@ class S3UtilsTest {
         
         // When & Then
         assertThrows(IOException.class, 
-            () -> S3Utils.uploadFile(testFile, invalidConfig, "test-key"));
+            () -> new S3Utils(invalidConfig).uploadFile(testFile, "test-key"));
     }
 
     @Test

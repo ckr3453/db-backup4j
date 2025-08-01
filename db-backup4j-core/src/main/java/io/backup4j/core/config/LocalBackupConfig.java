@@ -5,6 +5,11 @@ package io.backup4j.core.config;
  * 백업 파일 저장 경로, 압축 여부, 보관 기간 등을 설정합니다.
  */
 public class LocalBackupConfig {
+    public static final boolean DEFAULT_LOCAL_BACKUP_ENABLED = true;
+    public static final String DEFAULT_LOCAL_BACKUP_PATH = "./db-backup4j";
+    public static final String DEFAULT_LOCAL_BACKUP_RETENTION_DAYS = "30";
+    public static final boolean DEFAULT_LOCAL_BACKUP_COMPRESS = true;
+
     private final boolean enabled;
     private final String path;
     private final String retention;
@@ -39,10 +44,10 @@ public class LocalBackupConfig {
 
 
     public static class Builder {
-        private boolean enabled = ConfigDefaults.DEFAULT_LOCAL_BACKUP_ENABLED;
-        private String path = ConfigDefaults.DEFAULT_LOCAL_BACKUP_PATH;
-        private String retention = ConfigDefaults.DEFAULT_LOCAL_BACKUP_RETENTION_DAYS;
-        private boolean compress = ConfigDefaults.DEFAULT_LOCAL_BACKUP_COMPRESS;
+        private boolean enabled = DEFAULT_LOCAL_BACKUP_ENABLED;
+        private String path = DEFAULT_LOCAL_BACKUP_PATH;
+        private String retention = DEFAULT_LOCAL_BACKUP_RETENTION_DAYS;
+        private boolean compress = DEFAULT_LOCAL_BACKUP_COMPRESS;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;

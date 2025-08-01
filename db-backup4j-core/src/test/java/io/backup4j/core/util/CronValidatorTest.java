@@ -1,6 +1,6 @@
-package io.backup4j.core.config;
+package io.backup4j.core.util;
 
-import io.backup4j.core.util.CronValidator;
+import io.backup4j.core.validation.CronValidator;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
@@ -138,5 +138,66 @@ class CronValidatorTest {
         assertThat(CronValidator.validate(null).isValid()).isFalse();
         assertThat(CronValidator.validate("").isValid()).isFalse();
         assertThat(CronValidator.validate("   ").isValid()).isFalse();
+    }
+
+    @Test
+    void isValid_복잡한_스텝_표현식() {
+        // Given & When & Then - cron-utils는 복잡한 스텝 표현식 지원
+        assertThat(CronValidator.isValid("*/15 * * * *")).isTrue();     // 15분마다
+        assertThat(CronValidator.isValid("0 */2 * * *")).isTrue();      // 2시간마다
+        assertThat(CronValidator.isValid("0 9-17/2 * * *")).isTrue();   // 9시부터 17시까지 2시간마다
+        assertThat(CronValidator.isValid("15-45/5 * * * *")).isTrue();  // 15분부터 45분까지 5분마다
+    }
+
+    @Test
+    void isValid_복잡한_리스트_표현식() {
+        // Given & When & Then - 복잡한 리스트 표현식
+        assertThat(CronValidator.isValid("0,15,30,45 * * * *")).isTrue();        // 4번 실행
+        assertThat(CronValidator.isValid("0 9,12,15,18 * * *")).isTrue();        // 특정 시간들
+        assertThat(CronValidator.isValid("0 0 1,15 * *")).isTrue();             // 매월 1일, 15일
+        assertThat(CronValidator.isValid("0 0 * * 1,3,5")).isTrue();            // 월,수,금
+        assertThat(CronValidator.isValid("0 0 * 1,4,7,10 *")).isTrue();         // 분기별
+    }
+
+    @Test
+    void isValid_복잡한_범위_표현식() {
+        // Given & When & Then - 범위 표현식
+        assertThat(CronValidator.isValid("0 9-17 * * *")).isTrue();             // 업무시간
+        assertThat(CronValidator.isValid("0 0 1-7 * *")).isTrue();              // 매월 첫 주
+        assertThat(CronValidator.isValid("0 0 * * 1-5")).isTrue();              // 평일
+        assertThat(CronValidator.isValid("0 6-8,18-20 * * *")).isTrue();        // 범위 + 리스트 조합
+    }
+
+    @Test 
+    void validate_성능테스트_대량표현식() {
+        // Given - 다양한 cron 표현식들
+        String[] cronExpressions = {
+            "0 2 * * *", "15 14 1 * *", "0 22 * * 1-5", "*/5 * * * *",
+            "0 9-17/2 * * *", "0,30 * * * *", "0 0 1,15 * *", "0 0 * * 0"
+        };
+        
+        // When & Then - 성능 측정 (간단한 형태)
+        long startTime = System.currentTimeMillis();
+        
+        for (String expr : cronExpressions) {
+            CronValidator.isValid(expr);
+        }
+        
+        long endTime = System.currentTimeMillis();
+        long duration = endTime - startTime;
+        
+        // 모든 표현식 검증이 100ms 이내에 완료되어야 함
+        assertThat(duration).isLessThan(100);
+    }
+
+    @Test
+    void validate_에러메시지_확인() {
+        // Given & When & Then - 에러 메시지 확인
+        CronValidator.ValidationResult result = CronValidator.validate("invalid cron");
+        
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.getErrorMessage()).isNotNull();
+        assertThat(result.getErrorMessage()).contains("Invalid cron expression");
+        assertThat(result.getErrorMessage()).contains("Example:");
     }
 }

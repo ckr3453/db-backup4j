@@ -44,8 +44,7 @@ public class BackupResult {
     public static Builder builder() {
         return new Builder();
     }
-    
-    // Getters
+
     public String getBackupId() { return backupId; }
     public Status getStatus() { return status; }
     public LocalDateTime getStartTime() { return startTime; }
@@ -181,9 +180,9 @@ public class BackupResult {
         private LocalDateTime endTime;
         private Duration duration;
         private BackupMetadata metadata;
-        private List<BackupFile> files = new ArrayList<>();
-        private List<BackupError> errors = new ArrayList<>();
-        private List<BackupValidator.ValidationResult> validationResults = new ArrayList<>();
+        private final List<BackupFile> files = new ArrayList<>();
+        private final List<BackupError> errors = new ArrayList<>();
+        private final List<BackupValidator.ValidationResult> validationResults = new ArrayList<>();
         
         public Builder backupId(String backupId) { this.backupId = backupId; return this; }
         public Builder status(Status status) { this.status = status; return this; }

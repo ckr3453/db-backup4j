@@ -5,6 +5,8 @@ package io.backup4j.core.config;
  * 주기적인 백업 실행을 위한 cron 표현식을 설정합니다.
  */
 public class ScheduleConfig {
+    public static final boolean DEFAULT_SCHEDULE_ENABLED = false;
+
     private final boolean enabled;
     private final String cron;
 
@@ -26,7 +28,7 @@ public class ScheduleConfig {
     }
 
     public static class Builder {
-        private boolean enabled = ConfigDefaults.DEFAULT_SCHEDULE_ENABLED;
+        private boolean enabled = DEFAULT_SCHEDULE_ENABLED;
         private String cron;
 
         public Builder enabled(boolean enabled) {

@@ -7,15 +7,21 @@ import io.backup4j.core.util.CompressionUtils;
 import io.backup4j.core.util.BackupFileNameGenerator;
 import io.backup4j.core.util.RetentionPolicy;
 import io.backup4j.core.util.SqlUtils;
-import io.backup4j.core.util.Constants;
 import io.backup4j.core.util.S3Utils;
 import io.backup4j.core.config.S3BackupConfig;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Path;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * 데이터베이스 백업을 실행하는 클래스
@@ -35,8 +41,7 @@ public class DatabaseBackupExecutor {
         BackupResult.Builder resultBuilder = BackupResult.builder()
             .backupId(backupId)
             .startTime(startTime);
-            
-        
+
         try {
             // 1. 데이터베이스 백업 실행
             DatabaseBackupResult backupResult = performDatabaseBackup(config, resultBuilder);
@@ -67,12 +72,10 @@ public class DatabaseBackupExecutor {
             }
             
             // 8. 메타데이터 생성 및 결과 빌드
-            BackupResult result = buildFinalResult(config, originalSize, finalBackupFile, resultBuilder);
-            
-            return result;
+            return buildFinalResult(config, originalSize, finalBackupFile, resultBuilder);
                 
         } catch (Exception e) {
-            return handleUnexpectedError(e, resultBuilder, config);
+            return handleUnexpectedError(e, resultBuilder);
         }
     }
     
@@ -89,11 +92,25 @@ public class DatabaseBackupExecutor {
             try (Connection connection = DatabaseConnection.getConnection(config.getDatabase());
                  BufferedWriter writer = new BufferedWriter(new FileWriter(backupFile))) {
                 
+                // 스키마 해결 및 검증
+                SchemaResolver.SchemaResolutionResult schemaResult = 
+                    SchemaResolver.resolveAndValidateSchema(connection, config.getDatabase());
+                    
+                String resolvedSchema = schemaResult.getResolvedSchema();
+                
+                // 스키마 정보를 백업 파일에 기록
+                writer.write("-- Schema Resolution: " + schemaResult.getResolutionMethod() + "\n");
+                writer.write("-- Target Schema: " + resolvedSchema + "\n");
+                if (!schemaResult.isSchemaExists()) {
+                    writer.write("-- WARNING: Schema '" + resolvedSchema + "' does not exist!\n");
+                }
+                writer.write("\n");
+                
                 // 데이터베이스 타입에 따른 백업 실행
                 if (config.getDatabase().getType() == DatabaseType.MYSQL) {
-                    executeMySQLBackup(connection, writer, config.getDatabase().getName());
+                    executeMySQLBackup(connection, writer, resolvedSchema, config);
                 } else if (config.getDatabase().getType() == DatabaseType.POSTGRESQL) {
-                    executePostgreSQLBackup(connection, writer, config.getDatabase().getName());
+                    executePostgreSQLBackup(connection, writer, resolvedSchema, config);
                 }
                 
                 writer.flush();
@@ -108,7 +125,6 @@ public class DatabaseBackupExecutor {
                 // 디스크 공간 부족 감지
                 if (isDiskSpaceError(e)) {
                     errorMessage = "Insufficient disk space for backup: " + e.getMessage();
-                } else {
                 }
                 
                 resultBuilder.addError(new BackupResult.BackupError(
@@ -152,8 +168,9 @@ public class DatabaseBackupExecutor {
                 compressionMetrics = CompressionUtils.compressWithMetrics(backupFile.toPath(), compressedPath);
                 finalBackupFile = compressedPath.toFile();
                 
-                // 원본 파일 삭제
+                // 원본 파일 삭제 (압축 후 원본은 불필요)
                 if (!backupFile.delete()) {
+                    System.err.println("Warning: Failed to delete original backup file: " + backupFile.getPath());
                 }
                 
                 
@@ -230,10 +247,9 @@ public class DatabaseBackupExecutor {
                 int retentionDays = Integer.parseInt(config.getLocal().getRetention());
                 if (retentionDays > 0) {
                     Path retentionDirectory = backupFile.getParentFile().toPath();
-                    RetentionPolicy.CleanupResult cleanupResult = RetentionPolicy.cleanup(retentionDirectory, retentionDays, false);
-                    
-                    int keptFiles = cleanupResult.getTotalFiles() - cleanupResult.getDeletedFiles();
-                    
+                    RetentionPolicy retentionPolicy = new RetentionPolicy();
+                    RetentionPolicy.CleanupResult cleanupResult = retentionPolicy.cleanup(retentionDirectory, retentionDays, false);
+
                     if (cleanupResult.hasErrors()) {
                         for (String error : cleanupResult.getErrors()) {
                             resultBuilder.addError(new BackupResult.BackupError(
@@ -289,20 +305,17 @@ public class DatabaseBackupExecutor {
     /**
      * 예기치 않은 오류 처리
      */
-    private BackupResult handleUnexpectedError(Exception e, BackupResult.Builder resultBuilder, BackupConfig config) {
+    private BackupResult handleUnexpectedError(Exception e, BackupResult.Builder resultBuilder) {
         resultBuilder.addError(new BackupResult.BackupError(
             "system", 
             "Unexpected error: " + e.getMessage(), 
             e, 
             LocalDateTime.now()
         ));
-        BackupResult result = resultBuilder
+        return resultBuilder
             .endTime(LocalDateTime.now())
             .status(BackupResult.Status.FAILED)
             .build();
-        
-        
-        return result;
     }
     
     /**
@@ -358,8 +371,7 @@ public class DatabaseBackupExecutor {
      */
     private File createBackupFile(BackupConfig config) throws IOException {
         String fileName = BackupFileNameGenerator.generateFileName(
-            config.getDatabase().getName(), 
-            BackupFileNameGenerator.BackupType.MANUAL,
+            config.getDatabase().getName(),
             false  // 압축은 나중에 처리
         );
         
@@ -377,7 +389,7 @@ public class DatabaseBackupExecutor {
     /**
      * MySQL 데이터베이스 백업 실행
      */
-    private void executeMySQLBackup(Connection connection, BufferedWriter writer, String databaseName) 
+    private void executeMySQLBackup(Connection connection, BufferedWriter writer, String databaseName, BackupConfig config) 
             throws SQLException, IOException {
         
         writer.write("-- MySQL Database Backup by db-backup4j\n");
@@ -388,11 +400,81 @@ public class DatabaseBackupExecutor {
         writer.write("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n");
         
         // 테이블 목록 조회
+        List<String> allTables = new ArrayList<>();
         try (Statement stmt = connection.createStatement();
              ResultSet tables = stmt.executeQuery("SHOW TABLES")) {
             
             while (tables.next()) {
-                String tableName = tables.getString(1);
+                allTables.add(tables.getString(1));
+            }
+        }
+        
+        // 테이블 필터링 적용
+        TableFilter.FilterResult filterResult = TableFilter.filterTablesWithResult(
+            allTables,
+            DatabaseType.MYSQL,
+            config.getDatabase().isExcludeSystemTables(),
+            config.getDatabase().getExcludeTablePatterns(),
+            config.getDatabase().getIncludeTablePatterns()
+        );
+        
+        List<String> tablesToBackup = filterResult.getIncludedTables();
+        
+        // 필터링 결과 로그 출력
+        if (filterResult.hasExcludedTables()) {
+            writer.write("-- Filtered out " + filterResult.getExcludedCount() + " tables\n");
+            writer.write("-- Backing up " + filterResult.getIncludedCount() + " tables\n\n");
+        }
+        
+        // 의존성 분석 및 올바른 순서로 백업
+        try {
+            TableDependencyAnalyzer.DependencyAnalysisResult dependencyResult = 
+                TableDependencyAnalyzer.analyzeDependencies(connection, DatabaseType.MYSQL, tablesToBackup, databaseName);
+                
+            List<String> orderedTables = dependencyResult.getOrderedTables();
+            List<TableDependencyAnalyzer.TableDependency> dependencies = 
+                dependencyResult.getDependenciesForTables(tablesToBackup);
+            
+            // 순환 참조 경고
+            if (dependencyResult.hasCircularReferences()) {
+                Set<String> circularTables = dependencyResult.getCircularReferenceTables();
+                writer.write("-- WARNING: Circular reference detected in tables: " + 
+                    String.join(", ", circularTables) + "\n");
+                writer.write("-- These tables will be backed up with FOREIGN_KEY_CHECKS=0\n\n");
+            }
+            
+            writer.write("-- Backing up " + orderedTables.size() + " tables in dependency order\n\n");
+            
+            // 3단계 백업 프로세스
+            // 1단계: 외래 키 제약 조건 없이 테이블 구조 생성
+            writer.write("-- Phase 1: Table Structures (without Foreign Key constraints)\n");
+            for (String tableName : orderedTables) {
+                backupTableStructureOnly(connection, writer, tableName, DatabaseType.MYSQL);
+            }
+            writer.write("\n");
+            
+            // 2단계: 의존성 순서대로 데이터 삽입
+            writer.write("-- Phase 2: Data Insertion (in dependency order)\n");
+            for (String tableName : orderedTables) {
+                backupTableDataOnly(connection, writer, tableName, DatabaseType.MYSQL);
+            }
+            writer.write("\n");
+            
+            // 3단계: 외래 키 제약 조건 추가
+            if (!dependencies.isEmpty()) {
+                writer.write("-- Phase 3: Foreign Key Constraints\n");
+                for (TableDependencyAnalyzer.TableDependency dependency : dependencies) {
+                    addForeignKeyConstraint(writer, dependency, DatabaseType.MYSQL);
+                }
+                writer.write("\n");
+            }
+            
+        } catch (SQLException e) {
+            // 의존성 분석 실패 시 기존 방식으로 백업
+            writer.write("-- WARNING: Dependency analysis failed, using original backup method\n");
+            writer.write("-- Error: " + e.getMessage() + "\n\n");
+            
+            for (String tableName : tablesToBackup) {
                 backupTable(connection, writer, tableName, DatabaseType.MYSQL);
             }
         }
@@ -403,20 +485,93 @@ public class DatabaseBackupExecutor {
     /**
      * PostgreSQL 데이터베이스 백업 실행
      */
-    private void executePostgreSQLBackup(Connection connection, BufferedWriter writer, String databaseName) 
+    private void executePostgreSQLBackup(Connection connection, BufferedWriter writer, String schemaName, BackupConfig config) 
             throws SQLException, IOException {
         
         writer.write("-- PostgreSQL Database Backup by db-backup4j\n");
         writer.write("-- Generated: " + LocalDateTime.now() + "\n");
-        writer.write("-- Database: " + databaseName + "\n\n");
+        writer.write("-- Schema: " + schemaName + "\n\n");
         
         // 테이블 목록 조회
+        List<String> allTables = new ArrayList<>();
         try (Statement stmt = connection.createStatement();
-             ResultSet tables = stmt.executeQuery(
-                 "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")) {
+             PreparedStatement pstmt = connection.prepareStatement(
+                 "SELECT table_name FROM information_schema.tables WHERE table_schema = ?")) {
             
-            while (tables.next()) {
-                String tableName = tables.getString(1);
+            pstmt.setString(1, schemaName);
+            try (ResultSet tables = pstmt.executeQuery()) {
+                while (tables.next()) {
+                    allTables.add(tables.getString(1));
+                }
+            }
+        }
+        
+        // 테이블 필터링 적용
+        TableFilter.FilterResult filterResult = TableFilter.filterTablesWithResult(
+            allTables,
+            DatabaseType.POSTGRESQL,
+            config.getDatabase().isExcludeSystemTables(),
+            config.getDatabase().getExcludeTablePatterns(),
+            config.getDatabase().getIncludeTablePatterns()
+        );
+        
+        List<String> tablesToBackup = filterResult.getIncludedTables();
+        
+        // 필터링 결과 로그 출력
+        if (filterResult.hasExcludedTables()) {
+            writer.write("-- Filtered out " + filterResult.getExcludedCount() + " tables\n");
+            writer.write("-- Backing up " + filterResult.getIncludedCount() + " tables\n\n");
+        }
+        
+        // 의존성 분석 및 올바른 순서로 백업  
+        try {
+            TableDependencyAnalyzer.DependencyAnalysisResult dependencyResult = 
+                TableDependencyAnalyzer.analyzeDependencies(connection, DatabaseType.POSTGRESQL, tablesToBackup, schemaName);
+                
+            List<String> orderedTables = dependencyResult.getOrderedTables();
+            List<TableDependencyAnalyzer.TableDependency> dependencies = 
+                dependencyResult.getDependenciesForTables(tablesToBackup);
+            
+            // 순환 참조 경고
+            if (dependencyResult.hasCircularReferences()) {
+                Set<String> circularTables = dependencyResult.getCircularReferenceTables();
+                writer.write("-- WARNING: Circular reference detected in tables: " + 
+                    String.join(", ", circularTables) + "\n");
+                writer.write("-- These tables will require manual constraint handling\n\n");
+            }
+            
+            writer.write("-- Backing up " + orderedTables.size() + " tables in dependency order\n\n");
+            
+            // 3단계 백업 프로세스
+            // 1단계: 외래 키 제약 조건 없이 테이블 구조 생성
+            writer.write("-- Phase 1: Table Structures (without Foreign Key constraints)\n");
+            for (String tableName : orderedTables) {
+                backupTableStructureOnly(connection, writer, tableName, DatabaseType.POSTGRESQL);
+            }
+            writer.write("\n");
+            
+            // 2단계: 의존성 순서대로 데이터 삽입
+            writer.write("-- Phase 2: Data Insertion (in dependency order)\n");  
+            for (String tableName : orderedTables) {
+                backupTableDataOnly(connection, writer, tableName, DatabaseType.POSTGRESQL);
+            }
+            writer.write("\n");
+            
+            // 3단계: 외래 키 제약 조건 추가
+            if (!dependencies.isEmpty()) {
+                writer.write("-- Phase 3: Foreign Key Constraints\n");
+                for (TableDependencyAnalyzer.TableDependency dependency : dependencies) {
+                    addForeignKeyConstraint(writer, dependency, DatabaseType.POSTGRESQL);
+                }
+                writer.write("\n");
+            }
+            
+        } catch (SQLException e) {
+            // 의존성 분석 실패 시 기존 방식으로 백업
+            writer.write("-- WARNING: Dependency analysis failed, using original backup method\n");
+            writer.write("-- Error: " + e.getMessage() + "\n\n");
+            
+            for (String tableName : tablesToBackup) {
                 backupTable(connection, writer, tableName, DatabaseType.POSTGRESQL);
             }
         }
@@ -427,8 +582,6 @@ public class DatabaseBackupExecutor {
      */
     private void backupTable(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
             throws SQLException, IOException {
-        
-        
         // 테이블 구조 백업
         backupTableStructure(connection, writer, tableName, dbType);
         
@@ -494,7 +647,7 @@ public class DatabaseBackupExecutor {
                     
                     Object value = rs.getObject(i);
                     if (value == null) {
-                        insertSQL.append(Constants.SQL_NULL);
+                        insertSQL.append("NULL");
                     } else if (value instanceof String) {
                         insertSQL.append(SqlUtils.escapeSqlString(value.toString()));
                     } else {
@@ -544,9 +697,9 @@ public class DatabaseBackupExecutor {
                 createTable.append("  \"").append(columnName).append("\" ");
                 
                 // 데이터 타입 처리
-                if ("character varying".equals(dataType) && maxLength != null && maxLength > 0) {
+                if ("character varying".equals(dataType) && maxLength > 0) {
                     createTable.append("VARCHAR(").append(maxLength).append(")");
-                } else if ("character".equals(dataType) && maxLength != null && maxLength > 0) {
+                } else if ("character".equals(dataType)  && maxLength > 0) {
                     createTable.append("CHAR(").append(maxLength).append(")");
                 } else {
                     createTable.append(dataType.toUpperCase());
@@ -594,15 +747,127 @@ public class DatabaseBackupExecutor {
     }
     
     /**
+     * 테이블 구조만 백업 (외래 키 제약 조건 제외)
+     */
+    private void backupTableStructureOnly(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
+            throws SQLException, IOException {
+        
+        if (dbType == DatabaseType.MYSQL) {
+            // MySQL: SHOW CREATE TABLE에서 외래 키 제약 조건 제거
+            try (Statement stmt = connection.createStatement();
+                 ResultSet rs = stmt.executeQuery("SHOW CREATE TABLE `" + tableName + "`")) {
+                
+                if (rs.next()) {
+                    writer.write("DROP TABLE IF EXISTS `" + tableName + "`;\n");
+                    String createTableSql = rs.getString(2);
+                    
+                    // 외래 키 제약 조건 제거
+                    String cleanedSql = removeForeignKeyConstraints(createTableSql);
+                    writer.write(cleanedSql + ";\n\n");
+                }
+            }
+        } else if (dbType == DatabaseType.POSTGRESQL) {
+            // PostgreSQL: 기존 방식 사용 (이미 외래 키 제약 조건이 제외됨)
+            writer.write("DROP TABLE IF EXISTS \"" + tableName + "\";\n");
+            generatePostgreSQLCreateTable(connection, writer, tableName);
+        }
+    }
+    
+    /**
+     * 테이블 데이터만 백업
+     */
+    private void backupTableDataOnly(Connection connection, BufferedWriter writer, String tableName, DatabaseType dbType) 
+            throws SQLException, IOException {
+        
+        // 테이블명 유효성 검사
+        if (!SqlUtils.isValidSqlIdentifier(tableName)) {
+            throw new IllegalArgumentException("Invalid table name: " + tableName);
+        }
+        
+        String quotedTableName = dbType == DatabaseType.MYSQL ? 
+            SqlUtils.quoteMySqlIdentifier(tableName) : 
+            SqlUtils.quotePostgreSqlIdentifier(tableName);
+        
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM " + quotedTableName)) {
+            
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            
+            while (rs.next()) {
+                StringBuilder insertSQL = new StringBuilder();
+                if (dbType == DatabaseType.MYSQL) {
+                    insertSQL.append("INSERT INTO ").append(SqlUtils.quoteMySqlIdentifier(tableName)).append(" VALUES (");
+                } else {
+                    insertSQL.append("INSERT INTO ").append(SqlUtils.quotePostgreSqlIdentifier(tableName)).append(" VALUES (");
+                }
+                
+                for (int i = 1; i <= columnCount; i++) {
+                    if (i > 1) insertSQL.append(", ");
+                    
+                    Object value = rs.getObject(i);
+                    if (value == null) {
+                        insertSQL.append("NULL");
+                    } else if (value instanceof String) {
+                        insertSQL.append(SqlUtils.escapeSqlString(value.toString()));
+                    } else {
+                        insertSQL.append(value);
+                    }
+                }
+                
+                insertSQL.append(");\n");
+                writer.write(insertSQL.toString());
+            }
+        }
+        
+        writer.write("\n");
+    }
+    
+    /**
+     * 외래 키 제약 조건 추가
+     */
+    private void addForeignKeyConstraint(BufferedWriter writer, TableDependencyAnalyzer.TableDependency dependency, DatabaseType dbType) 
+            throws IOException {
+        
+        if (dbType == DatabaseType.MYSQL) {
+            writer.write(String.format("ALTER TABLE `%s` ADD CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES `%s` (`%s`);\n",
+                dependency.getChildTable(),
+                dependency.getConstraintName(),
+                dependency.getChildColumn(),
+                dependency.getParentTable(),
+                dependency.getParentColumn()));
+        } else if (dbType == DatabaseType.POSTGRESQL) {
+            writer.write(String.format("ALTER TABLE \"%s\" ADD CONSTRAINT \"%s\" FOREIGN KEY (\"%s\") REFERENCES \"%s\" (\"%s\");\n",
+                dependency.getChildTable(),
+                dependency.getConstraintName(),
+                dependency.getChildColumn(),
+                dependency.getParentTable(),
+                dependency.getParentColumn()));
+        }
+    }
+    
+    /**
+     * CREATE TABLE 문에서 외래 키 제약 조건을 제거합니다.
+     */
+    private String removeForeignKeyConstraints(String createTableSql) {
+        // MySQL의 외래 키 제약 조건 패턴을 제거
+        // CONSTRAINT `fk_name` FOREIGN KEY (`column`) REFERENCES `table` (`column`)
+        String result = createTableSql.replaceAll(",\\s*CONSTRAINT\\s+`[^`]+`\\s+FOREIGN\\s+KEY\\s+\\([^)]+\\)\\s+REFERENCES\\s+`[^`]+`\\s+\\([^)]+\\)(?:\\s+ON\\s+DELETE\\s+\\w+)?(?:\\s+ON\\s+UPDATE\\s+\\w+)?", "");
+        
+        // KEY 정의 뒤에 남아있는 외래 키 참조도 제거
+        result = result.replaceAll(",\\s*FOREIGN\\s+KEY\\s+\\([^)]+\\)\\s+REFERENCES\\s+`[^`]+`\\s+\\([^)]+\\)(?:\\s+ON\\s+DELETE\\s+\\w+)?(?:\\s+ON\\s+UPDATE\\s+\\w+)?", "");
+        
+        return result;
+    }
+    
+    /**
      * S3 백업 실행
      */
     private void executeS3Backup(File backupFile, BackupConfig config, BackupResult.Builder resultBuilder) {
-        
         S3BackupConfig s3Config = config.getS3();
         if (!s3Config.isEnabled()) {
             return;
         }
-        
         
         try {
             // S3 객체 키 생성 (접두어 + 파일명)
@@ -611,9 +876,8 @@ public class DatabaseBackupExecutor {
                 backupFile.getName();
             
             // S3 업로드 실행
-            S3Utils.uploadFile(backupFile, s3Config, objectKey);
-            
-            
+            S3Utils s3Utils = new S3Utils(s3Config);
+            s3Utils.uploadFile(backupFile, objectKey);
             
         } catch (IOException e) {
             String errorMessage = "S3 backup failed: " + e.getMessage();
@@ -645,6 +909,6 @@ public class DatabaseBackupExecutor {
                lowerMessage.contains("not enough space") ||
                lowerMessage.contains("disk full") ||
                lowerMessage.contains("insufficient disk space") ||
-               e instanceof java.nio.file.FileSystemException;
+               e instanceof FileSystemException;
     }
 }

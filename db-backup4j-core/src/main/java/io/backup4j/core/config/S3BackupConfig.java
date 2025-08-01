@@ -5,6 +5,10 @@ package io.backup4j.core.config;
  * S3 버킷, 리전, 인증 정보, 백업 파일 경로 등을 설정합니다.
  */
 public class S3BackupConfig {
+    public static final boolean DEFAULT_S3_BACKUP_ENABLED = false;
+    public static final String DEFAULT_S3_PREFIX = "db-backup4j";
+    public static final String DEFAULT_S3_REGION = "ap-northeast-2";
+
     private final boolean enabled;
     private final String bucket;
     private final String prefix;
@@ -51,10 +55,10 @@ public class S3BackupConfig {
 
 
     public static class Builder {
-        private boolean enabled = ConfigDefaults.DEFAULT_S3_BACKUP_ENABLED;
+        private boolean enabled = DEFAULT_S3_BACKUP_ENABLED;
         private String bucket;
-        private String prefix = ConfigDefaults.DEFAULT_S3_PREFIX;
-        private String region = ConfigDefaults.DEFAULT_S3_REGION;
+        private String prefix = DEFAULT_S3_PREFIX;
+        private String region = DEFAULT_S3_REGION;
         private String accessKey;
         private String secretKey;
 

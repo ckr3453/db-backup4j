@@ -24,19 +24,4 @@ public class DatabaseConnection {
     public static Connection getConnection(DatabaseConfig config) throws SQLException {
         return DriverManager.getConnection(config.getUrl(), config.getUsername(), config.getPassword());
     }
-    
-    /**
-     * 데이터베이스 연결을 안전하게 종료합니다.
-     * 
-     * @param connection 종료할 데이터베이스 연결
-     */
-    public static void closeConnection(Connection connection) {
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (SQLException e) {
-                // 로그 출력 생략
-            }
-        }
-    }
 }

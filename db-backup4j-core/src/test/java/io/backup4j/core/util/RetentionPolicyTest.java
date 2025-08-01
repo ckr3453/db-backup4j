@@ -1,6 +1,5 @@
 package io.backup4j.core.util;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -24,6 +22,7 @@ class RetentionPolicyTest {
 
     private Path backupDir;
     private Instant fixedTime;
+    private RetentionPolicy retentionPolicy;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -32,12 +31,7 @@ class RetentionPolicyTest {
         
         // 고정된 시간으로 테스트 (현재보다 미래 시간)
         fixedTime = Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS);
-        RetentionPolicy.setTimeProvider(() -> fixedTime);
-    }
-    
-    @AfterEach
-    void tearDown() {
-        RetentionPolicy.resetTimeProvider();
+        retentionPolicy = new RetentionPolicy(() -> fixedTime);
     }
 
     @Test
@@ -46,7 +40,7 @@ class RetentionPolicyTest {
         createBackupFile("backup.sql");
 
         // When - 0일 보존 기간으로 정리
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 0);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 0);
 
         // Then - fixedTime(2024-01-15)이 cutoff이므로 현재 생성된 파일(실제 시간)이 삭제됨
         assertThat(result.getTotalFiles()).isEqualTo(1);
@@ -60,7 +54,7 @@ class RetentionPolicyTest {
         createBackupFile("backup2.sql.gz");
 
         // When - 매우 긴 보존 기간 (1000일)
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 1000);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 1000);
 
         // Then - 모든 파일이 보존되어야 함
         assertThat(result.getTotalFiles()).isEqualTo(2);
@@ -76,7 +70,7 @@ class RetentionPolicyTest {
         Path file = createBackupFile("backup.sql");
 
         // When - Dry run으로 실행
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 0, true);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 0, true);
 
         // Then - 파일이 삭제 대상이지만 실제로는 삭제되지 않음
         assertThat(result.getTotalFiles()).isEqualTo(1);
@@ -96,7 +90,7 @@ class RetentionPolicyTest {
         createRegularFile("script.sql"); // .sql이지만 백업 파일로 인식됨
 
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 0);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 0);
 
         // Then - 백업 파일만 삭제됨
         assertThat(result.getTotalFiles()).isEqualTo(5); // .sql 파일들이 백업 파일로 인식
@@ -114,7 +108,7 @@ class RetentionPolicyTest {
         }
 
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 0);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 0);
 
         // Then
         assertThat(result.getTotalFiles()).isEqualTo(1);
@@ -133,7 +127,7 @@ class RetentionPolicyTest {
         Path nonExistentDir = tempDir.resolve("non-existent");
 
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(nonExistentDir, 5);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(nonExistentDir, 5);
 
         // Then
         assertThat(result.getTotalFiles()).isEqualTo(0);
@@ -149,7 +143,7 @@ class RetentionPolicyTest {
         Files.write(file, "content".getBytes());
 
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(file, 5);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(file, 5);
 
         // Then
         assertThat(result.getTotalFiles()).isEqualTo(0);
@@ -160,7 +154,7 @@ class RetentionPolicyTest {
     @Test
     void testCleanup_WithEmptyDirectory() {
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 5);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 5);
 
         // Then
         assertThat(result.getTotalFiles()).isEqualTo(0);
@@ -171,86 +165,12 @@ class RetentionPolicyTest {
     }
 
     @Test
-    void testListBackupFiles_OrdersByDateDescending() throws IOException {
-        // Given - 파일을 순차적으로 생성하여 생성 시간 차이 만들기
-        Path file1 = createBackupFile("backup1.sql");
-        try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        Path file2 = createBackupFile("backup2.sql");
-        try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        Path file3 = createBackupFile("backup3.sql");
-
-        // When
-        List<RetentionPolicy.BackupFileInfo> files = RetentionPolicy.listBackupFiles(backupDir);
-
-        // Then
-        assertThat(files).hasSize(3);
-        
-        // 최신 파일부터 정렬되어야 함
-        assertThat(files.get(0).getPath().getFileName().toString()).isEqualTo("backup3.sql");
-        assertThat(files.get(1).getPath().getFileName().toString()).isEqualTo("backup2.sql");
-        assertThat(files.get(2).getPath().getFileName().toString()).isEqualTo("backup1.sql");
-    }
-
-    @Test
-    void testListBackupFiles_WithEmptyDirectory() {
-        // When
-        List<RetentionPolicy.BackupFileInfo> files = RetentionPolicy.listBackupFiles(backupDir);
-
-        // Then
-        assertThat(files).isEmpty();
-    }
-
-    @Test
-    void testListBackupFiles_WithNonExistentDirectory() {
-        // Given
-        Path nonExistentDir = tempDir.resolve("non-existent");
-
-        // When
-        List<RetentionPolicy.BackupFileInfo> files = RetentionPolicy.listBackupFiles(nonExistentDir);
-
-        // Then
-        assertThat(files).isEmpty();
-    }
-
-    @Test
-    void testBackupFileInfo_IsOlderThan() throws IOException {
-        // Given
-        createBackupFile("test.sql");
-        List<RetentionPolicy.BackupFileInfo> files = RetentionPolicy.listBackupFiles(backupDir);
-        RetentionPolicy.BackupFileInfo info = files.get(0);
-
-        // When & Then - fixedTime 기준으로 테스트
-        // 파일은 현재 시간에 생성되었고, fixedTime은 현재 시간 + 1일이므로
-        // 파일이 fixedTime보다 1일 이상 이전에 생성됨
-        assertThat(info.isOlderThan(0)).isTrue();   // fixedTime 기준으로 오래됨
-        assertThat(info.isOlderThan(2)).isFalse();  // 2일보다는 새로움
-    }
-
-    @Test
-    void testBackupFileInfo_GettersAndToString() throws IOException {
-        // Given
-        Path file = createBackupFile("test.sql");
-        List<RetentionPolicy.BackupFileInfo> files = RetentionPolicy.listBackupFiles(backupDir);
-        RetentionPolicy.BackupFileInfo info = files.get(0);
-
-        // When & Then
-        assertThat(info.getPath()).isEqualTo(file);
-        assertThat(info.getSize()).isGreaterThan(0);
-        assertThat(info.getCreationTime()).isNotNull();
-        assertThat(info.getLastModifiedTime()).isNotNull();
-        assertThat(info.getCreationDateTime()).isNotNull();
-        assertThat(info.getLastModifiedDateTime()).isNotNull();
-        assertThat(info.toString()).contains("test.sql");
-        assertThat(info.toString()).contains("bytes");
-    }
-
-    @Test
     void testCleanupResult_GettersAndToString() throws IOException {
         // Given
         createBackupFile("test.sql");
 
         // When
-        RetentionPolicy.CleanupResult result = RetentionPolicy.cleanup(backupDir, 0);
+        RetentionPolicy.CleanupResult result = retentionPolicy.cleanup(backupDir, 0);
 
         // Then
         assertThat(result.getTotalFiles()).isEqualTo(1);

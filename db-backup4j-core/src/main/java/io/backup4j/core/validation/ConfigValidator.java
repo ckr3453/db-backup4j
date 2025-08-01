@@ -1,4 +1,4 @@
-package io.backup4j.core.util;
+package io.backup4j.core.validation;
 
 import io.backup4j.core.config.*;
 

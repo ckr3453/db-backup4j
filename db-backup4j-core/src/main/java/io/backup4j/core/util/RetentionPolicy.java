@@ -9,9 +9,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -20,10 +18,8 @@ import java.util.stream.Stream;
  * 설정된 보존 기간보다 오래된 백업 파일들을 자동으로 삭제하고 관리함
  */
 public class RetentionPolicy {
-    
-    
     /**
-     * 시간 공급자 인터페이스 - 테스트 시 모킹 가능
+     * 시간 공급자 인터페이스
      */
     public interface TimeProvider {
         Instant now();
@@ -39,21 +35,21 @@ public class RetentionPolicy {
         }
     }
     
-    private static TimeProvider timeProvider = new SystemTimeProvider();
+    private final TimeProvider timeProvider;
     
     /**
-     * 테스트를 위한 시간 공급자 설정
-     * @param provider 시간 공급자
+     * 기본 시간 공급자를 사용하는 생성자
      */
-    public static void setTimeProvider(TimeProvider provider) {
-        timeProvider = provider != null ? provider : new SystemTimeProvider();
+    public RetentionPolicy() {
+        this.timeProvider = new SystemTimeProvider();
     }
     
     /**
-     * 시간 공급자를 기본값으로 재설정
+     * 커스텀 시간 공급자를 사용하는 생성자
+     * @param timeProvider 시간 공급자
      */
-    public static void resetTimeProvider() {
-        timeProvider = new SystemTimeProvider();
+    public RetentionPolicy(TimeProvider timeProvider) {
+        this.timeProvider = timeProvider != null ? timeProvider : new SystemTimeProvider();
     }
     
     /**
@@ -121,7 +117,7 @@ public class RetentionPolicy {
      * @param retentionDays 보존 기간 (일)
      * @return 정리 결과
      */
-    public static CleanupResult cleanup(Path backupDirectory, int retentionDays) {
+    public CleanupResult cleanup(Path backupDirectory, int retentionDays) {
         return cleanup(backupDirectory, retentionDays, false);
     }
     
@@ -133,71 +129,166 @@ public class RetentionPolicy {
      * @param dryRun true면 실제 삭제하지 않고 시뮬레이션만 수행
      * @return 정리 결과
      */
-    public static CleanupResult cleanup(Path backupDirectory, int retentionDays, boolean dryRun) {
-        
-        List<String> deletedFilePaths = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
-        int totalFiles = 0;
-        int deletedFiles = 0;
-        long freedSpace = 0;
-        
-        if (!Files.exists(backupDirectory) || !Files.isDirectory(backupDirectory)) {
-            String error = "Backup directory does not exist or is not a directory: " + backupDirectory;
-            errors.add(error);
-            return new CleanupResult(0, 0, 0, deletedFilePaths, errors);
+    public CleanupResult cleanup(Path backupDirectory, int retentionDays, boolean dryRun) {
+        // 1. 디렉터리 검증 및 초기화
+        CleanupContext context = validateAndInitialize(backupDirectory, retentionDays);
+        if (context.hasInitialErrors()) {
+            return context.buildResult();
         }
         
-        try {
-            // 현재 시간에서 보존 기간을 뺀 임계점 계산
-            Instant cutoffTime = timeProvider.now().minusSeconds(retentionDays * 24 * 60 * 60L);
+        // 2. 백업 파일 스캔
+        List<Path> candidateFiles = scanBackupFiles(backupDirectory, context);
+        if (context.hasErrors()) {
+            return context.buildResult();
+        }
+        
+        // 3. 파일 삭제 처리
+        processFileDeletion(candidateFiles, context, dryRun);
+        
+        // 4. 결과 반환
+        return context.buildResult();
+    }
+    
+    /**
+     * 디렉터리 검증 및 정리 컨텍스트 초기화
+     * 
+     * @param backupDirectory 백업 디렉터리
+     * @param retentionDays 보존 기간 (일)
+     * @return 정리 작업 컨텍스트
+     */
+    private CleanupContext validateAndInitialize(Path backupDirectory, int retentionDays) {
+        CleanupContext context = new CleanupContext(retentionDays, this.timeProvider);
+        
+        if (!Files.exists(backupDirectory) || !Files.isDirectory(backupDirectory)) {
+            context.addError("Backup directory does not exist or is not a directory: " + backupDirectory);
+        }
+        
+        return context;
+    }
+    
+    /**
+     * 백업 파일들을 스캔하여 정리 대상 파일들을 찾습니다.
+     * 
+     * @param backupDirectory 백업 디렉터리
+     * @param context 정리 작업 컨텍스트
+     * @return 정리 대상 파일 목록
+     */
+    private static List<Path> scanBackupFiles(Path backupDirectory, CleanupContext context) {
+        List<Path> candidateFiles = new ArrayList<>();
+        
+        try (Stream<Path> files = Files.walk(backupDirectory, 1)) {
+            List<Path> backupFiles = files
+                .filter(Files::isRegularFile)
+                .filter(RetentionPolicy::isBackupFile)
+                .collect(Collectors.toList());
             
-            // 백업 파일 패턴으로 필터링 (*.sql, *.sql.gz)
-            try (Stream<Path> files = Files.walk(backupDirectory, 1)) {
-                List<Path> backupFiles = files
-                    .filter(Files::isRegularFile)
-                    .filter(RetentionPolicy::isBackupFile)
-                    .collect(Collectors.toList());
-                
-                totalFiles = backupFiles.size();
-                
-                // 파일 생성 시간을 기준으로 정리 대상 파일 선별
-                for (Path file : backupFiles) {
-                    try {
-                        BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
-                        Instant fileTime = attrs.creationTime().toInstant();
-                        
-                        if (fileTime.isBefore(cutoffTime) || fileTime.equals(cutoffTime)) {
-                            long fileSize = attrs.size();
-                            
-                            if (dryRun) {
-                                deletedFilePaths.add(file.toString());
-                                deletedFiles++;
-                                freedSpace += fileSize;
-                            } else {
-                                try {
-                                    Files.delete(file);
-                                    deletedFilePaths.add(file.toString());
-                                    deletedFiles++;
-                                    freedSpace += fileSize;
-                                } catch (IOException e) {
-                                    String error = "Failed to delete file: " + file + " - " + e.getMessage();
-                                    errors.add(error);
-                                }
-                            }
-                        }
-                    } catch (IOException e) {
-                        String error = "Failed to read file attributes: " + file + " - " + e.getMessage();
-                        errors.add(error);
+            context.setTotalFiles(backupFiles.size());
+            
+            // 파일 생성 시간을 기준으로 정리 대상 파일 선별
+            for (Path file : backupFiles) {
+                try {
+                    BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+                    Instant fileTime = attrs.creationTime().toInstant();
+                    
+                    if (context.shouldDelete(fileTime)) {
+                        candidateFiles.add(file);
                     }
+                } catch (IOException e) {
+                    context.addError("Failed to read file attributes: " + file + " - " + e.getMessage());
                 }
             }
             
         } catch (IOException e) {
-            String error = "Failed to scan backup directory: " + e.getMessage();
+            context.addError("Failed to scan backup directory: " + e.getMessage());
+        }
+        
+        return candidateFiles;
+    }
+    
+    /**
+     * 파일 삭제를 처리합니다.
+     * 
+     * @param candidateFiles 삭제 대상 파일들
+     * @param context 정리 작업 컨텍스트
+     * @param dryRun 시뮬레이션 모드 여부
+     */
+    private static void processFileDeletion(List<Path> candidateFiles, CleanupContext context, boolean dryRun) {
+        for (Path file : candidateFiles) {
+            deleteFile(file, context, dryRun);
+        }
+    }
+    
+    /**
+     * 단일 파일을 삭제합니다.
+     * 
+     * @param file 삭제할 파일
+     * @param context 정리 작업 컨텍스트
+     * @param dryRun 시뮬레이션 모드 여부
+     */
+    private static void deleteFile(Path file, CleanupContext context, boolean dryRun) {
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+            long fileSize = attrs.size();
+            
+            if (dryRun) {
+                context.recordDeletion(file.toString(), fileSize);
+            } else {
+                try {
+                    Files.delete(file);
+                    context.recordDeletion(file.toString(), fileSize);
+                } catch (IOException e) {
+                    context.addError("Failed to delete file: " + file + " - " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            context.addError("Failed to read file attributes for deletion: " + file + " - " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 정리 작업의 상태와 결과를 관리하는 내부 클래스
+     */
+    private static class CleanupContext {
+        private final Instant cutoffTime;
+        private final List<String> deletedFilePaths = new ArrayList<>();
+        private final List<String> errors = new ArrayList<>();
+        private int totalFiles = 0;
+        private int deletedFiles = 0;
+        private long freedSpace = 0;
+        
+        public CleanupContext(int retentionDays, TimeProvider timeProvider) {
+            this.cutoffTime = timeProvider.now().minusSeconds(retentionDays * 24 * 60 * 60L);
+        }
+        
+        public boolean shouldDelete(Instant fileTime) {
+            return fileTime.isBefore(cutoffTime) || fileTime.equals(cutoffTime);
+        }
+        
+        public void setTotalFiles(int totalFiles) {
+            this.totalFiles = totalFiles;
+        }
+        
+        public void addError(String error) {
             errors.add(error);
         }
         
-        return new CleanupResult(totalFiles, deletedFiles, freedSpace, deletedFilePaths, errors);
+        public void recordDeletion(String filePath, long fileSize) {
+            deletedFilePaths.add(filePath);
+            deletedFiles++;
+            freedSpace += fileSize;
+        }
+        
+        public boolean hasInitialErrors() {
+            return !errors.isEmpty();
+        }
+        
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
+        
+        public CleanupResult buildResult() {
+            return new CleanupResult(totalFiles, deletedFiles, freedSpace, deletedFilePaths, errors);
+        }
     }
     
     /**
@@ -212,46 +303,6 @@ public class RetentionPolicy {
                fileName.endsWith(".sql.gz") || 
                fileName.endsWith(".sql.gzip") ||
                (fileName.contains("backup") && (fileName.endsWith(".sql") || fileName.endsWith(".gz")));
-    }
-    
-    /**
-     * 디렉토리의 모든 백업 파일 목록을 최신순으로 조회
-     * 
-     * @param backupDirectory 백업 디렉토리
-     * @return 백업 파일 목록 (최신순)
-     */
-    public static List<BackupFileInfo> listBackupFiles(Path backupDirectory) {
-        List<BackupFileInfo> backupFiles = new ArrayList<>();
-        
-        if (!Files.exists(backupDirectory) || !Files.isDirectory(backupDirectory)) {
-            return backupFiles;
-        }
-        
-        try (Stream<Path> files = Files.walk(backupDirectory, 1)) {
-            backupFiles = files
-                .filter(Files::isRegularFile)
-                .filter(RetentionPolicy::isBackupFile)
-                .map(path -> {
-                    try {
-                        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-                        return new BackupFileInfo(
-                            path,
-                            attrs.size(),
-                            attrs.creationTime().toInstant(),
-                            attrs.lastModifiedTime().toInstant()
-                        );
-                    } catch (IOException e) {
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparing(BackupFileInfo::getCreationTime).reversed())
-                .collect(Collectors.toList());
-                
-        } catch (IOException e) {
-        }
-        
-        return backupFiles;
     }
     
     /**
@@ -295,6 +346,10 @@ public class RetentionPolicy {
         }
         
         public boolean isOlderThan(int days) {
+            return isOlderThan(days, new SystemTimeProvider());
+        }
+        
+        public boolean isOlderThan(int days, TimeProvider timeProvider) {
             Instant cutoff = timeProvider.now().minusSeconds(days * 24 * 60 * 60L);
             return creationTime.isBefore(cutoff);
         }

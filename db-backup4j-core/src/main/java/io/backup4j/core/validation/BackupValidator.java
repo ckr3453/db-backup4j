@@ -1,6 +1,7 @@
 package io.backup4j.core.validation;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -8,7 +9,10 @@ import java.util.zip.GZIPInputStream;
  * 체크섬 대신 실용적이고 빠른 검증 방법들을 제공합니다.
  */
 public class BackupValidator {
-    
+
+    private BackupValidator() {
+    }
+
     private static final int SAMPLE_SIZE = 1024; // 첫 1KB만 읽어서 검증
     
     /**
@@ -141,7 +145,7 @@ public class BackupValidator {
     private static void validateCompressedFile(File compressedFile, ValidationResult.Builder result) {
         try {
             // GZIP 파일 압축 해제 가능 여부 확인
-            try (GZIPInputStream gzis = new GZIPInputStream(new FileInputStream(compressedFile))) {
+            try (GZIPInputStream gzis = new GZIPInputStream(Files.newInputStream(compressedFile.toPath()))) {
                 byte[] buffer = new byte[SAMPLE_SIZE];
                 int bytesRead = gzis.read(buffer);
                 
@@ -217,14 +221,12 @@ public class BackupValidator {
         
         @Override
         public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("ValidationResult{");
-            sb.append("valid=").append(valid);
-            sb.append(", filePath='").append(filePath).append('\'');
-            sb.append(", errors=").append(errors.size());
-            sb.append(", warnings=").append(warnings.size());
-            sb.append('}');
-            return sb.toString();
+            return "ValidationResult{" +
+                "valid=" + valid +
+                ", filePath='" + filePath + '\'' +
+                ", errors=" + errors.size() +
+                ", warnings=" + warnings.size() +
+                '}';
         }
         
         public static class Builder {

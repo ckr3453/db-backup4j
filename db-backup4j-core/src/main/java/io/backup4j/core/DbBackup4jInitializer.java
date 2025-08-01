@@ -2,10 +2,12 @@ package io.backup4j.core;
 
 import io.backup4j.core.database.DatabaseBackupExecutor;
 import io.backup4j.core.config.BackupConfig;
-import io.backup4j.core.config.ConfigParser;
-import io.backup4j.core.config.ConfigValidator;
+import io.backup4j.core.util.ConfigParser;
+import io.backup4j.core.validation.ConfigValidator;
 import io.backup4j.core.scheduler.SimpleBackupScheduler;
 import io.backup4j.core.exception.SchedulerStartException;
+
+import java.net.URL;
 
 
 /**
@@ -13,8 +15,9 @@ import io.backup4j.core.exception.SchedulerStartException;
  * 설정 파일을 자동으로 감지하고 백업을 실행하는 통합 초기화 클래스입니다.
  */
 public class DbBackup4jInitializer {
-    
-    private static SimpleBackupScheduler scheduler;
+
+    private DbBackup4jInitializer() {
+    }
     
     /**
      * 기본 설정 파일을 자동으로 감지하여 백업을 실행합니다.
@@ -30,15 +33,11 @@ public class DbBackup4jInitializer {
      * @param resourcePath 클래스패스 내 설정 파일 경로 (예: "db-backup4j.yml")
      */
     public static void runFromClasspath(String resourcePath) {
-        try {
-            java.net.URL resource = DbBackup4jInitializer.class.getClassLoader().getResource(resourcePath);
-            if (resource == null) {
-                throw new RuntimeException("Configuration file not found in classpath: " + resourcePath);
-            }
-            run(resource.getPath());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load config from classpath", e);
+        URL resource = DbBackup4jInitializer.class.getClassLoader().getResource(resourcePath);
+        if (resource == null) {
+            throw new RuntimeException("Configuration file not found in classpath: " + resourcePath);
         }
+        run(resource.getPath());
     }
     
     /**
@@ -48,7 +47,6 @@ public class DbBackup4jInitializer {
      */
     public static void run(String configPath) {
         try {
-            
             // 1. 설정 파일 로드
             BackupConfig config;
             if (configPath != null && !configPath.trim().isEmpty()) {
@@ -63,14 +61,12 @@ public class DbBackup4jInitializer {
                 throw new RuntimeException("Invalid configuration");
             }
             
-            
             // 3. 스케줄 확인 후 실행 방식 결정
             if (config.getSchedule() != null && config.getSchedule().isEnabled()) {
                 startScheduler(config);
             } else {
                 executeBackup(config);
             }
-            
             
         } catch (Exception e) {
             throw new RuntimeException("Backup execution failed", e);
@@ -85,12 +81,9 @@ public class DbBackup4jInitializer {
     private static void executeBackup(BackupConfig config) {
         
         try {
-            
             // 실제 백업 실행
             DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
             executor.executeBackup(config);
-            
-            
         } catch (Exception e) {
             throw new RuntimeException("Backup execution failed", e);
         }
@@ -104,26 +97,24 @@ public class DbBackup4jInitializer {
     private static void startScheduler(BackupConfig config) {
         
         try {
-            scheduler = new SimpleBackupScheduler(config);
+            SimpleBackupScheduler scheduler = new SimpleBackupScheduler(config);
             scheduler.start();
             
             // JVM 종료 시 스케줄러 정리
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                if (scheduler != null && scheduler.isRunning()) {
+                if (scheduler.isRunning()) {
                     scheduler.stop();
                 }
             }));
             
-            
-            // 스케줄러가 실행 중일 때 메인 스레드가 종료되지 않도록 대기
-            while (scheduler.isRunning()) {
-                Thread.sleep(1000);
-            }
+            // 스케줄러가 종료될 때까지 메인 스레드 대기
+            scheduler.awaitTermination();
             
         } catch (SchedulerStartException e) {
             throw new RuntimeException("Scheduler start failed", e);
-        } catch (Exception e) {
-            throw new RuntimeException("Scheduler start failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Scheduler interrupted", e);
         }
     }
     

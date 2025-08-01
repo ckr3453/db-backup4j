@@ -260,27 +260,4 @@ class DatabaseConnectionTest {
             assertNotSame(conn2, conn3);
         }
     }
-
-    @Test
-    void closeConnection_실제연결_정상종료() throws SQLException {
-        // given
-        String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
-                mysqlContainer.getHost(),
-                mysqlContainer.getFirstMappedPort(),
-                mysqlContainer.getDatabaseName());
-        DatabaseConfig config = DatabaseConfig.builder()
-            .url(jdbcUrl)
-            .username(mysqlContainer.getUsername())
-            .password(mysqlContainer.getPassword())
-            .build();
-
-        Connection connection = DatabaseConnection.getConnection(config);
-        assertFalse(connection.isClosed());
-
-        // when
-        DatabaseConnection.closeConnection(connection);
-
-        // then
-        assertTrue(connection.isClosed());
-    }
 }

@@ -54,20 +54,20 @@ class DatabaseBackupExecutorTest {
         // given - MySQL 컨테이너 설정
         String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
             mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
-        
+
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
             .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path(tempDir.toString())
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -101,20 +101,20 @@ class DatabaseBackupExecutorTest {
         // given - PostgreSQL 컨테이너 설정
         String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
             postgresContainer.getHost(), postgresContainer.getFirstMappedPort(), postgresContainer.getDatabaseName());
-        
+
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
             .url(jdbcUrl)
             .username(postgresContainer.getUsername())
             .password(postgresContainer.getPassword())
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path(tempDir.toString())
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -134,7 +134,7 @@ class DatabaseBackupExecutorTest {
 
         String content = readFileContent(backupFiles[0].toPath());
         assertTrue(content.contains("-- PostgreSQL Database Backup by db-backup4j"));
-        assertTrue(content.contains("-- Database: testdb"));
+        assertTrue(content.contains("-- Schema: public"));
         assertTrue(content.contains("DROP TABLE IF EXISTS"));
         assertTrue(content.contains("INSERT INTO"));
         assertTrue(content.contains("Alice"));
@@ -146,20 +146,20 @@ class DatabaseBackupExecutorTest {
         // given
         String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
             mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
-        
+
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
             .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path(tempDir.toString())
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -175,7 +175,7 @@ class DatabaseBackupExecutorTest {
         // then
         File[] backupFiles = tempDir.toFile().listFiles((dir, name) -> name.endsWith(".sql"));
         String content = readFileContent(backupFiles[0].toPath());
-        
+
         // NULL 값 처리 확인
         assertTrue(content.contains("NULL"));
         // 특수문자 이스케이프 확인 (single quote)
@@ -186,23 +186,23 @@ class DatabaseBackupExecutorTest {
     void executeBackup_디렉토리생성_성공() throws Exception {
         // given - 존재하지 않는 디렉토리 경로
         Path newDir = tempDir.resolve("new-backup-directory");
-        
+
         String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
             mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
-        
+
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
             .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path(newDir.toString())
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -217,7 +217,7 @@ class DatabaseBackupExecutorTest {
         // then
         assertTrue(Files.exists(newDir));
         assertTrue(Files.isDirectory(newDir));
-        
+
         File[] backupFiles = newDir.toFile().listFiles((dir, name) -> name.endsWith(".sql"));
         assertNotNull(backupFiles);
         assertEquals(1, backupFiles.length);
@@ -231,14 +231,14 @@ class DatabaseBackupExecutorTest {
             .username("invalid-user")
             .password("invalid-pass")
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path(tempDir.toString())
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -247,7 +247,7 @@ class DatabaseBackupExecutorTest {
 
         // when
         BackupResult result = executor.executeBackup(config);
-        
+
         // then
         assertNotNull(result);
         assertEquals(BackupResult.Status.FAILED, result.getStatus());
@@ -263,20 +263,20 @@ class DatabaseBackupExecutorTest {
         // given - 읽기 전용 디렉토리 (시뮬레이션을 위해 불가능한 경로 사용)
         String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
             mysqlContainer.getHost(), mysqlContainer.getFirstMappedPort(), mysqlContainer.getDatabaseName());
-        
+
         DatabaseConfig databaseConfig = DatabaseConfig.builder()
             .url(jdbcUrl)
             .username(mysqlContainer.getUsername())
             .password(mysqlContainer.getPassword())
             .build();
-            
+
         LocalBackupConfig localConfig = LocalBackupConfig.builder()
             .enabled(true)
             .path("/invalid/path/that/cannot/be/created") // 생성 불가능한 경로
             .retention("30")
             .compress(false)
             .build();
-            
+
         BackupConfig config = BackupConfig.builder()
             .database(databaseConfig)
             .local(localConfig)
@@ -285,7 +285,7 @@ class DatabaseBackupExecutorTest {
 
         // when
         BackupResult result = executor.executeBackup(config);
-        
+
         // then
         assertNotNull(result);
         assertEquals(BackupResult.Status.FAILED, result.getStatus());
@@ -301,17 +301,17 @@ class DatabaseBackupExecutorTest {
     private void setupMySQLTestData(DatabaseConfig config) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection(config);
              Statement stmt = conn.createStatement()) {
-            
+
             // 테이블 생성
             stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
                 "id INT PRIMARY KEY, " +
                 "name VARCHAR(50), " +
                 "email VARCHAR(100)" +
                 ")");
-            
+
             // 기존 데이터 삭제
             stmt.execute("DELETE FROM users");
-            
+
             // 테스트 데이터 삽입
             stmt.execute("INSERT INTO users (id, name, email) VALUES " +
                 "(1, 'John', 'john@example.com'), " +
@@ -322,17 +322,17 @@ class DatabaseBackupExecutorTest {
     private void setupPostgreSQLTestData(DatabaseConfig config) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection(config);
              Statement stmt = conn.createStatement()) {
-            
+
             // 테이블 생성
             stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
                 "id INTEGER PRIMARY KEY, " +
                 "name VARCHAR(50), " +
                 "email VARCHAR(100)" +
                 ")");
-            
+
             // 기존 데이터 삭제
             stmt.execute("DELETE FROM users");
-            
+
             // 테스트 데이터 삽입
             stmt.execute("INSERT INTO users (id, name, email) VALUES " +
                 "(1, 'Alice', 'alice@example.com'), " +
@@ -343,17 +343,17 @@ class DatabaseBackupExecutorTest {
     private void setupMySQLSpecialData(DatabaseConfig config) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection(config);
              Statement stmt = conn.createStatement()) {
-            
+
             // 테이블 생성
             stmt.execute("CREATE TABLE IF NOT EXISTS special_data (" +
                 "id INT PRIMARY KEY, " +
                 "name VARCHAR(50), " +
                 "comment TEXT" +
                 ")");
-            
+
             // 기존 데이터 삭제
             stmt.execute("DELETE FROM special_data");
-            
+
             // 특수 데이터 삽입 (NULL, 특수문자 포함)
             stmt.execute("INSERT INTO special_data (id, name, comment) VALUES " +
                 "(1, 'John', 'John''s comment'), " +

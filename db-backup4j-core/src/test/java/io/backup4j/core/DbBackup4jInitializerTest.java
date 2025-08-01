@@ -135,8 +135,8 @@ class DbBackup4jInitializerTest {
         RuntimeException exception = assertThrows(RuntimeException.class,
             () -> DbBackup4jInitializer.runFromClasspath(nonexistentResource));
         
-        assertEquals("Failed to load config from classpath", exception.getMessage());
-        assertTrue(exception.getMessage().contains("Failed to load config from classpath"));
+        assertTrue(exception.getMessage().contains("Configuration file not found in classpath"));
+        assertTrue(exception.getMessage().contains(nonexistentResource));
         
         // 로거 제거로 인해 예외만 검증
     }

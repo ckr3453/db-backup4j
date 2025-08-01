@@ -11,6 +11,9 @@ import java.util.zip.GZIPOutputStream;
  * GZIP 형식으로 파일을 압축하고 해제하는 기능을 제공합니다.
  */
 public class CompressionUtils {
+
+    private CompressionUtils() {
+    }
     
     private static final int BUFFER_SIZE = 8192;
     
