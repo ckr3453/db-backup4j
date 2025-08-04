@@ -1,7 +1,6 @@
 package io.backup4j.core.config;
 
 import io.backup4j.core.database.DatabaseType;
-import io.backup4j.core.util.ConfigParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

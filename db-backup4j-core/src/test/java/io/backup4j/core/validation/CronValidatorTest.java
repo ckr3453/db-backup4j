@@ -1,6 +1,5 @@
-package io.backup4j.core.util;
+package io.backup4j.core.validation;
 
-import io.backup4j.core.validation.CronValidator;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 

@@ -1,4 +1,4 @@
-package io.backup4j.core.util;
+package io.backup4j.core.config;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,7 +16,6 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 import java.util.Collections;
 
-import io.backup4j.core.config.*;
 import org.yaml.snakeyaml.Yaml;
 
 /**

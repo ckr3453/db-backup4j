@@ -2,11 +2,12 @@ package io.backup4j.core;
 
 import io.backup4j.core.database.DatabaseBackupExecutor;
 import io.backup4j.core.config.BackupConfig;
-import io.backup4j.core.util.ConfigParser;
+import io.backup4j.core.config.ConfigParser;
 import io.backup4j.core.validation.ConfigValidator;
 import io.backup4j.core.scheduler.SimpleBackupScheduler;
 import io.backup4j.core.exception.SchedulerStartException;
 
+import java.io.IOException;
 import java.net.URL;
 
 
@@ -68,8 +69,8 @@ public class DbBackup4jInitializer {
                 executeBackup(config);
             }
             
-        } catch (Exception e) {
-            throw new RuntimeException("Backup execution failed", e);
+        } catch (IOException e) {
+            throw new RuntimeException("Configuration file error: " + e.getMessage(), e);
         }
     }
 
@@ -79,14 +80,8 @@ public class DbBackup4jInitializer {
      * @param config 백업 설정
      */
     private static void executeBackup(BackupConfig config) {
-        
-        try {
-            // 실제 백업 실행
-            DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
-            executor.executeBackup(config);
-        } catch (Exception e) {
-            throw new RuntimeException("Backup execution failed", e);
-        }
+        DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
+        executor.executeBackup(config);
     }
     
     /**

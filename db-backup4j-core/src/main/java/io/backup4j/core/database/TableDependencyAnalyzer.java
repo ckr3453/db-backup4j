@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 public class TableDependencyAnalyzer {
     
     private TableDependencyAnalyzer() {
-        // 유틸리티 클래스
     }
     
     /**
@@ -149,7 +148,7 @@ public class TableDependencyAnalyzer {
                                                                       String databaseName) throws SQLException {
         
         Set<String> tableSet = new HashSet<>(tableNames);
-        List<TableDependency> dependencies = new ArrayList<>();
+        List<TableDependency> dependencies;
         
         switch (databaseType) {
             case MYSQL:

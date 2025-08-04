@@ -86,7 +86,7 @@ class DatabaseBackupExecutorTest {
         assertEquals(1, backupFiles.length);
 
         String content = readFileContent(backupFiles[0].toPath());
-        assertTrue(content.contains("-- MySQL Database Backup by db-backup4j"));
+        assertTrue(content.contains("-- MYSQL Database Backup by db-backup4j"));
         assertTrue(content.contains("-- Database: testdb"));
         assertTrue(content.contains("SET FOREIGN_KEY_CHECKS=0;"));
         assertTrue(content.contains("SET FOREIGN_KEY_CHECKS=1;"));
@@ -133,7 +133,7 @@ class DatabaseBackupExecutorTest {
         assertEquals(1, backupFiles.length);
 
         String content = readFileContent(backupFiles[0].toPath());
-        assertTrue(content.contains("-- PostgreSQL Database Backup by db-backup4j"));
+        assertTrue(content.contains("-- POSTGRESQL Database Backup by db-backup4j"));
         assertTrue(content.contains("-- Schema: public"));
         assertTrue(content.contains("DROP TABLE IF EXISTS"));
         assertTrue(content.contains("INSERT INTO"));

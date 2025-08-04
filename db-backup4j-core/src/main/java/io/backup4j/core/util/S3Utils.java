@@ -21,6 +21,9 @@ public class S3Utils {
     private static final String AWS_ALGORITHM = "AWS4-HMAC-SHA256";
     private static final String AWS_REQUEST = "aws4_request";
     private static final String AWS_SERVICE = "s3";
+    private static final int DEFAULT_BUFFER_SIZE = 8192;
+    private static final int HTTP_SUCCESS_MIN = 200;
+    private static final int HTTP_SUCCESS_MAX = 299;
     
     private final S3BackupConfig config;
     
@@ -82,7 +85,7 @@ public class S3Utils {
                  BufferedInputStream bis = new BufferedInputStream(fis);
                  BufferedOutputStream bos = new BufferedOutputStream(os)) {
                 
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
                 int bytesRead;
                 
                 while ((bytesRead = bis.read(buffer)) != -1) {
@@ -94,7 +97,7 @@ public class S3Utils {
             
             // 응답 확인
             int responseCode = connection.getResponseCode();
-            if (responseCode < 200 || responseCode >= 300) {
+            if (responseCode < HTTP_SUCCESS_MIN || responseCode > HTTP_SUCCESS_MAX) {
                 throw new IOException("S3 upload failed. Response code: " + responseCode +
                     ", Error: " + readErrorResponse(connection));
             }

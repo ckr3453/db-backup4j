@@ -14,6 +14,12 @@ public class BackupValidator {
     }
 
     private static final int SAMPLE_SIZE = 1024; // 첫 1KB만 읽어서 검증
+    private static final int MIN_FILE_SIZE_BYTES = 100; // 최소 파일 크기
+    private static final String GZIP_EXTENSION = ".gz";
+    private static final String GZIP_EXTENSION_ALT = ".gzip";
+    private static final String SQL_EXTENSION = ".sql";
+    private static final String SQL_COMMENT_PREFIX = "--";
+    private static final String CREATE_TABLE_KEYWORD = "CREATE TABLE";
     
     /**
      * 백업 파일의 기본적인 유효성을 검증합니다.
@@ -42,9 +48,9 @@ public class BackupValidator {
             }
             
             // 4. 파일 내용 검증
-            if (backupFile.getName().endsWith(".gz") || backupFile.getName().endsWith(".gzip")) {
+            if (backupFile.getName().endsWith(GZIP_EXTENSION) || backupFile.getName().endsWith(GZIP_EXTENSION_ALT)) {
                 validateCompressedFile(backupFile, result);
-            } else if (backupFile.getName().endsWith(".sql")) {
+            } else if (backupFile.getName().endsWith(SQL_EXTENSION)) {
                 validateSQLFile(backupFile, result);
             }
             
@@ -86,7 +92,7 @@ public class BackupValidator {
             return false;
         }
         
-        if (fileSize < 100) { // 100 바이트 미만은 너무 작음
+        if (fileSize < MIN_FILE_SIZE_BYTES) {
             result.addWarning("Backup file is very small (" + fileSize + " bytes): " + file.getName());
         }
         
@@ -113,11 +119,11 @@ public class BackupValidator {
             String sample = readFileSample(sqlFile);
             
             // SQL 백업 파일에 포함되어야 할 기본 요소들 검증
-            if (!sample.contains("--")) {
+            if (!sample.contains(SQL_COMMENT_PREFIX)) {
                 result.addWarning("SQL file may not contain proper comments");
             }
             
-            boolean hasCreateTable = sample.toUpperCase().contains("CREATE TABLE");
+            boolean hasCreateTable = sample.toUpperCase().contains(CREATE_TABLE_KEYWORD);
             boolean hasInsert = sample.toUpperCase().contains("INSERT");
             boolean hasDrop = sample.toUpperCase().contains("DROP");
             

@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -304,61 +303,5 @@ public class RetentionPolicy {
                fileName.endsWith(".sql.gzip") ||
                (fileName.contains("backup") && (fileName.endsWith(".sql") || fileName.endsWith(".gz")));
     }
-    
-    /**
-     * 백업 파일 정보를 담는 클래스
-     */
-    public static class BackupFileInfo {
-        private final Path path;
-        private final long size;
-        private final Instant creationTime;
-        private final Instant lastModifiedTime;
-        
-        public BackupFileInfo(Path path, long size, Instant creationTime, Instant lastModifiedTime) {
-            this.path = path;
-            this.size = size;
-            this.creationTime = creationTime;
-            this.lastModifiedTime = lastModifiedTime;
-        }
-        
-        public Path getPath() {
-            return path;
-        }
-        
-        public long getSize() {
-            return size;
-        }
-        
-        public Instant getCreationTime() {
-            return creationTime;
-        }
-        
-        public Instant getLastModifiedTime() {
-            return lastModifiedTime;
-        }
-        
-        public LocalDateTime getCreationDateTime() {
-            return LocalDateTime.ofInstant(creationTime, ZoneId.systemDefault());
-        }
-        
-        public LocalDateTime getLastModifiedDateTime() {
-            return LocalDateTime.ofInstant(lastModifiedTime, ZoneId.systemDefault());
-        }
-        
-        public boolean isOlderThan(int days) {
-            return isOlderThan(days, new SystemTimeProvider());
-        }
-        
-        public boolean isOlderThan(int days, TimeProvider timeProvider) {
-            Instant cutoff = timeProvider.now().minusSeconds(days * 24 * 60 * 60L);
-            return creationTime.isBefore(cutoff);
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("BackupFileInfo{path=%s, size=%d bytes, created=%s}", 
-                    path.getFileName(), size, 
-                    getCreationDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        }
-    }
+
 }

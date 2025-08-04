@@ -1,6 +1,5 @@
 package io.backup4j.core.config;
 
-import io.backup4j.core.util.ConfigParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

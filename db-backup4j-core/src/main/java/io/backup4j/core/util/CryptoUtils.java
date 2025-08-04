@@ -17,6 +17,8 @@ import java.util.Base64;
  */
 public class CryptoUtils {
     
+    private static final int DEFAULT_BUFFER_SIZE = 8192;
+    
     private CryptoUtils() {
     }
     
@@ -48,7 +50,7 @@ public class CryptoUtils {
             try (FileInputStream fis = new FileInputStream(file);
                  BufferedInputStream bis = new BufferedInputStream(fis)) {
                 
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
                 int bytesRead;
                 
                 while ((bytesRead = bis.read(buffer)) != -1) {

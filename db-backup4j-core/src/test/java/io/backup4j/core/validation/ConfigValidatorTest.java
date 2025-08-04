@@ -1,7 +1,6 @@
-package io.backup4j.core.util;
+package io.backup4j.core.validation;
 
 import io.backup4j.core.config.*;
-import io.backup4j.core.validation.ConfigValidator;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

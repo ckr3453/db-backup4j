@@ -104,10 +104,10 @@ class DbBackup4jInitializerTest {
         }
         
         // when & then
-        RuntimeException exception = assertThrows(RuntimeException.class,
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> DbBackup4jInitializer.run(configFile.toString()));
         
-        assertEquals("Backup execution failed", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Database URL cannot be null or empty"));
         
         // 로거 제거로 인해 예외만 검증
     }
@@ -121,7 +121,7 @@ class DbBackup4jInitializerTest {
         RuntimeException exception = assertThrows(RuntimeException.class,
             () -> DbBackup4jInitializer.run(nonexistentFile));
         
-        assertEquals("Backup execution failed", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Configuration file error"));
         
         // 로거 제거로 인해 예외만 검증
     }
@@ -149,7 +149,7 @@ class DbBackup4jInitializerTest {
         RuntimeException exception = assertThrows(RuntimeException.class,
             DbBackup4jInitializer::run);
         
-        assertEquals("Backup execution failed", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Configuration file error"));
         
         // 로거 제거로 인해 예외만 검증
     }
