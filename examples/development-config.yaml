@@ -1,0 +1,22 @@
+# Development Configuration Example
+# Lightweight configuration for development environment
+
+database:
+  url: jdbc:mysql://localhost:3306/myapp_db?useSSL=false&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8
+  username: dev_user
+  password: dev_password
+
+backup:
+  local:
+    enabled: true
+    path: ./dev-backups
+    retention: 7           # Keep only 7 days for development
+    compress: false        # Skip compression for faster development
+
+  # Disable S3 for development
+  s3:
+    enabled: false
+
+# Manual backup only (no scheduling)
+schedule:
+  enabled: false

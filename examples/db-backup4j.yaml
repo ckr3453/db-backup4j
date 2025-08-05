@@ -1,0 +1,37 @@
+# db-backup4j Configuration Example (YAML Format)
+# This file demonstrates all available configuration options
+
+# Database Configuration (Required)
+database:
+  url: jdbc:mysql://localhost:3306/myapp_db?useSSL=false&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8
+  username: backup_user
+  password: backup_password
+
+# Local Backup Configuration
+backup:
+  local:
+    enabled: true
+    path: ./db-backup4j/backups
+    retention: 30                    # Days to keep backup files
+    compress: true                   # Enable GZIP compression
+
+  # S3 Backup Configuration
+  s3:
+    enabled: true
+    bucket: my-backup-bucket
+    region: us-west-2
+    access-key: your-access-key
+    secret-key: your-secret-key
+    prefix: database-backups/prod
+
+# Scheduler Configuration
+schedule:
+  enabled: true
+  cron: "0 2 * * *"                  # Daily at 2:00 AM
+
+# Common cron expressions:
+# "0 2 * * *"     - Daily at 2:00 AM
+# "0 2 * * 0"     - Weekly on Sunday at 2:00 AM
+# "0 2 1 * *"     - Monthly on 1st day at 2:00 AM
+# "0 */6 * * *"   - Every 6 hours
+# "0 0 */3 * *"   - Every 3 days at midnight

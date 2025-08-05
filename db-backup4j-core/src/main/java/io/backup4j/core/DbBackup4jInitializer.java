@@ -1,77 +1,116 @@
 package io.backup4j.core;
 
+import io.backup4j.core.database.DatabaseBackupExecutor;
 import io.backup4j.core.config.BackupConfig;
 import io.backup4j.core.config.ConfigParser;
-import io.backup4j.core.config.ConfigValidator;
+import io.backup4j.core.validation.ConfigValidator;
+import io.backup4j.core.scheduler.SimpleBackupScheduler;
+import io.backup4j.core.exception.SchedulerStartException;
 
+import java.io.IOException;
+import java.net.URL;
+
+
+/**
+ * db-backup4j 라이브러리의 메인 진입점
+ * 설정 파일을 자동으로 감지하고 백업을 실행하는 통합 초기화 클래스입니다.
+ */
 public class DbBackup4jInitializer {
+
+    private DbBackup4jInitializer() {
+    }
     
+    /**
+     * 기본 설정 파일을 자동으로 감지하여 백업을 실행합니다.
+     */
     public static void run() {
         run(null);
     }
     
+    /**
+     * 클래스패스에서 설정 파일을 찾아 백업을 실행합니다.
+     * Spring Boot의 application.yml처럼 resources/ 폴더에서 찾습니다.
+     * 
+     * @param resourcePath 클래스패스 내 설정 파일 경로 (예: "db-backup4j.yml")
+     */
+    public static void runFromClasspath(String resourcePath) {
+        URL resource = DbBackup4jInitializer.class.getClassLoader().getResource(resourcePath);
+        if (resource == null) {
+            throw new RuntimeException("Configuration file not found in classpath: " + resourcePath);
+        }
+        run(resource.getPath());
+    }
+    
+    /**
+     * 지정된 설정 파일로 백업을 실행합니다.
+     * 
+     * @param configPath 설정 파일 경로 (null인 경우 자동 감지)
+     */
     public static void run(String configPath) {
         try {
-            System.out.println("Starting DB Backup4j...");
-            
             // 1. 설정 파일 로드
             BackupConfig config;
             if (configPath != null && !configPath.trim().isEmpty()) {
                 config = ConfigParser.parseConfigFile(configPath);
-                System.out.println("Using config file: " + configPath);
             } else {
                 config = ConfigParser.autoDetectAndParse();
-                System.out.println("Auto-detected configuration file");
             }
             
             // 2. 설정 검증
             ConfigValidator.ValidationResult result = ConfigValidator.validate(config);
             if (!result.isValid()) {
-                System.err.println("Configuration validation failed:");
-                for (String error : result.getErrors()) {
-                    System.err.println("  - " + error);
-                }
                 throw new RuntimeException("Invalid configuration");
             }
             
-            System.out.println("Configuration validated successfully");
-            
             // 3. 스케줄 확인 후 실행 방식 결정
             if (config.getSchedule() != null && config.getSchedule().isEnabled()) {
-                System.out.println("Schedule enabled - starting scheduler");
                 startScheduler(config);
             } else {
-                System.out.println("Schedule disabled - running one-time backup");
                 executeBackup(config);
             }
             
-            System.out.println("DB Backup4j started successfully");
+        } catch (IOException e) {
+            throw new RuntimeException("Configuration file error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 일회성 백업을 실행합니다.
+     * 
+     * @param config 백업 설정
+     */
+    private static void executeBackup(BackupConfig config) {
+        DatabaseBackupExecutor executor = new DatabaseBackupExecutor();
+        executor.executeBackup(config);
+    }
+    
+    /**
+     * 스케줄러를 시작하여 주기적인 백업을 실행합니다.
+     * 
+     * @param config 백업 설정
+     */
+    private static void startScheduler(BackupConfig config) {
+        
+        try {
+            SimpleBackupScheduler scheduler = new SimpleBackupScheduler(config);
+            scheduler.start();
             
-        } catch (Exception e) {
-            System.err.println("Backup failed: " + e.getMessage());
-            throw new RuntimeException("Backup execution failed", e);
+            // JVM 종료 시 스케줄러 정리
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (scheduler.isRunning()) {
+                    scheduler.stop();
+                }
+            }));
+            
+            // 스케줄러가 종료될 때까지 메인 스레드 대기
+            scheduler.awaitTermination();
+            
+        } catch (SchedulerStartException e) {
+            throw new RuntimeException("Scheduler start failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Scheduler interrupted", e);
         }
     }
     
-    
-    private static void executeBackup(BackupConfig config) {
-        System.out.println("Executing database backup...");
-        
-        // TODO: 실제 백업 로직 구현
-        System.out.println("Database: " + config.getDatabase().getType() + " at " + config.getDatabase().getHost());
-        System.out.println("Local backup enabled: " + config.getLocal().isEnabled());
-        System.out.println("Email backup enabled: " + config.getEmail().isEnabled());
-        System.out.println("S3 backup enabled: " + config.getS3().isEnabled());
-        
-        // 임시 구현
-        System.out.println("Backup executed successfully (placeholder)");
-    }
-    
-    private static void startScheduler(BackupConfig config) {
-        System.out.println("Starting backup scheduler...");
-        System.out.println("Daily schedule: " + config.getSchedule().getDaily());
-        
-        // TODO: 실제 스케줄러 구현
-        System.out.println("Scheduler started successfully (placeholder)");
-    }
 }

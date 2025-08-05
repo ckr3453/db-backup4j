@@ -1,0 +1,26 @@
+# Production Configuration Example
+# Full configuration with all features enabled
+
+database:
+  url: jdbc:postgresql://localhost:5432/mydb?currentSchema=backup_schema
+  username: backup_service
+  password: ${DB_BACKUP_PASSWORD}  # Use environment variable
+
+backup:
+  local:
+    enabled: true
+    path: /backup/database
+    retention: 90
+    compress: true
+
+  s3:
+    enabled: true
+    bucket: company-database-backups
+    region: us-east-1
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}
+    prefix: production/mysql
+
+schedule:
+  enabled: true
+  cron: "0 1 * * *"  # Daily at 1:00 AM

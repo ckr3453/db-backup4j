@@ -14,19 +14,31 @@ allprojects {
 subprojects {
     apply plugin: 'java-library'
     
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    java {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
     
     dependencies {
         testImplementation 'org.junit.jupiter:junit-jupiter:5.9.3'
-        testImplementation 'org.mockito:mockito-core:4.11.0'
         testImplementation 'org.assertj:assertj-core:3.24.2'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
     
     test {
         useJUnitPlatform()
         testLogging {
             events "passed", "skipped", "failed"
+        }
+        
+        // Java 9+ 호환성을 위한 JVM 인수 (Java 8에서는 모듈 시스템 없음)
+        if (JavaVersion.current() >= JavaVersion.VERSION_1_9) {
+            jvmArgs += [
+                "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                "--add-opens=java.base/java.util=ALL-UNNAMED", 
+                "--add-opens=java.base/java.time=ALL-UNNAMED",
+                "--add-opens=java.base/java.io=ALL-UNNAMED"
+            ]
         }
     }
     

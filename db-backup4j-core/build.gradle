@@ -1,14 +1,50 @@
+plugins {
+    id 'java-library'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
 dependencies {
-    // 순수 Java 8+ 표준 라이브러리만 사용
+    api 'org.yaml:snakeyaml:2.4'
+    api 'com.cronutils:cron-utils:9.2.1'
+
+    compileOnly('mysql:mysql-connector-java:8.0.33') {
+        exclude group: 'com.google.protobuf'
+    }
+    compileOnly('org.postgresql:postgresql:42.7.3') {
+        exclude group: 'org.checkerframework'
+    }
+
+    testRuntimeOnly('mysql:mysql-connector-java:8.0.33') {
+        exclude group: 'com.google.protobuf'
+    }
+    testRuntimeOnly('org.postgresql:postgresql:42.7.3') {
+        exclude group: 'org.checkerframework'
+    }
+
+    testImplementation 'org.mockito:mockito-inline:5.2.0' // 특정 테스트 의존성 예시
+    testImplementation 'org.testcontainers:testcontainers:1.19.8'
+    testImplementation 'org.testcontainers:mysql:1.19.8'
+    testImplementation 'org.testcontainers:postgresql:1.19.8'
+    testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
+}
+
+shadowJar {
+    archiveBaseName.set('db-backup4j-core') // 최종 JAR 파일 이름 설정
+
+    manifest {
+        attributes(
+                'Implementation-Title': 'DB Backup4J Core',
+                'Implementation-Version': project.version, // 루트의 allprojects에서 정의된 project.version 사용
+                'Implementation-Vendor': 'Kyungrok Cho'
+        )
+    }
+
+    archiveClassifier.set('') // main JAR가 되도록 classifier 제거
+
+    relocate 'com.cronutils', 'io.backup4j.shaded.cronutils'
+    relocate 'org.yaml', 'io.backup4j.shaded.yaml'
 }
 
 jar {
-    archiveBaseName = 'db-backup4j-core'
-    manifest {
-        attributes(
-            'Implementation-Title': 'DB Backup4J Core',
-            'Implementation-Version': project.version,
-            'Implementation-Vendor': 'Kyungrok Cho'
-        )
-    }
+    enabled = false
 }

@@ -1,0 +1,16 @@
+# PostgreSQL Configuration Example
+database:
+  url: jdbc:postgresql://localhost:5432/mydb?currentSchema=backup_schema
+  username: postgres
+  password: postgres_password
+
+backup:
+  local:
+    enabled: true
+    path: /var/backups/postgresql
+    retention: 7
+    compress: true
+
+schedule:
+  enabled: true
+  cron: "0 3 * * *"  # Daily at 3:00 AM

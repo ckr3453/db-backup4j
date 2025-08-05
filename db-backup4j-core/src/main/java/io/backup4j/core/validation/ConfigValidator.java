@@ -1,17 +1,25 @@
-package io.backup4j.core.config;
+package io.backup4j.core.validation;
+
+import io.backup4j.core.config.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
+/**
+ * 백업 설정의 유효성을 검증하는 클래스입니다.
+ * 데이터베이스, 로컬 백업, S3 백업, 스케줄 설정의 유효성을 검사합니다.
+ */
 public class ConfigValidator {
-    
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(
-        "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$"
-    );
-    
-    private static final Pattern HHMM_TIME_PATTERN = Pattern.compile("^([01]?[0-9]|2[0-3]):[0-5][0-9]$");
-    
+
+    private ConfigValidator(){
+    }
+
+    /**
+     * 백업 설정 전체의 유효성을 검증합니다.
+     * 
+     * @param config 검증할 백업 설정
+     * @return 검증 결과와 오류 메시지 목록
+     */
     public static ValidationResult validate(BackupConfig config) {
         List<String> errors = new ArrayList<>();
         
@@ -22,33 +30,41 @@ public class ConfigValidator {
         
         validateDatabase(config.getDatabase(), errors);
         validateLocalBackup(config.getLocal(), errors);
-        validateEmail(config.getEmail(), errors);
         validateS3(config.getS3(), errors);
         validateSchedule(config.getSchedule(), errors);
         
         return new ValidationResult(errors.isEmpty(), errors);
     }
     
+    /**
+     * 데이터베이스 연결 설정을 검증합니다.
+     * 
+     * @param db 데이터베이스 설정
+     * @param errors 오류 메시지 목록
+     */
     private static void validateDatabase(DatabaseConfig db, List<String> errors) {
         if (db == null) {
             errors.add("Database configuration is required");
             return;
         }
         
-        if (db.getType() == null) {
-            errors.add("Database type is required");
+        if (isEmpty(db.getUrl())) {
+            errors.add("Required property 'database.url' is missing");
+            return;
         }
         
-        if (isEmpty(db.getHost())) {
-            errors.add("Database host is required");
-        }
-        
-        if (db.getPort() <= 0 || db.getPort() > 65535) {
-            errors.add("Database port must be between 1 and 65535");
-        }
-        
-        if (isEmpty(db.getName())) {
-            errors.add("Required property 'database.name' is missing");
+        // JDBC URL 형식 검증
+        try {
+            String url = db.getUrl();
+            if (!url.startsWith("jdbc:")) {
+                errors.add("Database URL must start with 'jdbc:'");
+            }
+            
+            // URL 자체의 유효성 검증은 DatabaseConfig 생성 시 이미 수행됨
+            // 여기서는 추가 검증만 수행
+            
+        } catch (Exception e) {
+            errors.add("Invalid database URL format: " + e.getMessage());
         }
         
         if (isEmpty(db.getUsername())) {
@@ -60,6 +76,12 @@ public class ConfigValidator {
         }
     }
     
+    /**
+     * 로컬 백업 설정을 검증합니다.
+     * 
+     * @param local 로컬 백업 설정
+     * @param errors 오류 메시지 목록
+     */
     private static void validateLocalBackup(LocalBackupConfig local, List<String> errors) {
         if (local == null || !local.isEnabled()) {
             return;
@@ -74,42 +96,12 @@ public class ConfigValidator {
         }
     }
     
-    private static void validateEmail(EmailBackupConfig email, List<String> errors) {
-        if (email == null || !email.isEnabled()) {
-            return;
-        }
-        
-        if (email.getSmtp() == null) {
-            errors.add("SMTP configuration is required when email backup is enabled");
-        } else {
-            if (isEmpty(email.getSmtp().getHost())) {
-                errors.add("Required property 'backup.email.smtp.host' is missing when email is enabled");
-            }
-            
-            if (email.getSmtp().getPort() <= 0 || email.getSmtp().getPort() > 65535) {
-                errors.add("SMTP port must be between 1 and 65535");
-            }
-        }
-        
-        if (isEmpty(email.getUsername())) {
-            errors.add("Required property 'backup.email.username' is missing when email is enabled");
-        }
-        
-        if (isEmpty(email.getPassword())) {
-            errors.add("Required property 'backup.email.password' is missing when email is enabled");
-        }
-        
-        if (email.getRecipients() == null || email.getRecipients().isEmpty()) {
-            errors.add("Required property 'backup.email.recipients' is missing when email is enabled");
-        } else {
-            for (String recipient : email.getRecipients()) {
-                if (!EMAIL_PATTERN.matcher(recipient.trim()).matches()) {
-                    errors.add("Invalid email format: " + recipient);
-                }
-            }
-        }
-    }
-    
+    /**
+     * S3 백업 설정을 검증합니다.
+     * 
+     * @param s3 S3 백업 설정
+     * @param errors 오류 메시지 목록
+     */
     private static void validateS3(S3BackupConfig s3, List<String> errors) {
         if (s3 == null || !s3.isEnabled()) {
             return;
@@ -132,30 +124,25 @@ public class ConfigValidator {
         }
     }
     
+    /**
+     * 스케줄 설정을 검증합니다.
+     * 
+     * @param schedule 스케줄 설정
+     * @param errors 오류 메시지 목록
+     */
     private static void validateSchedule(ScheduleConfig schedule, List<String> errors) {
         if (schedule == null || !schedule.isEnabled()) {
             return;
         }
         
-        boolean hasSchedule = false;
-        
-        if (!isEmpty(schedule.getDaily())) {
-            hasSchedule = true;
-            if (!HHMM_TIME_PATTERN.matcher(schedule.getDaily()).matches()) {
-                errors.add("Invalid daily schedule format: " + schedule.getDaily() + ". Use HH:MM format");
-            }
+        if (isEmpty(schedule.getCron())) {
+            errors.add("Cron expression is required when schedule is enabled");
+            return;
         }
         
-        if (!isEmpty(schedule.getWeekly())) {
-            hasSchedule = true;            
-        }
-        
-        if (!isEmpty(schedule.getMonthly())) {
-            hasSchedule = true;            
-        }
-        
-        if (!hasSchedule) {
-            errors.add("At least one schedule type (daily, weekly, or monthly) is required when scheduling is enabled");
+        CronValidator.ValidationResult cronResult = CronValidator.validate(schedule.getCron());
+        if (!cronResult.isValid()) {
+            errors.add(cronResult.getErrorMessage());
         }
     }
     
@@ -164,10 +151,19 @@ public class ConfigValidator {
     }
     
     
+    /**
+     * 백업 보관 기간 형식이 유효한지 검사합니다.
+     * 
+     * @param retention 보관 기간 문자열
+     * @return 숫자 형식이면 true, 그렇지 않으면 false
+     */
     private static boolean isValidRetention(String retention) {
         return retention.matches("\\d+");
     }
     
+    /**
+     * 설정 검증 결과를 담는 클래스입니다.
+     */
     public static class ValidationResult {
         private final boolean valid;
         private final List<String> errors;

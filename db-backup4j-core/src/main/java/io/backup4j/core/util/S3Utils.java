@@ -1,0 +1,174 @@
+package io.backup4j.core.util;
+
+import io.backup4j.core.config.S3BackupConfig;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * AWS S3 백업을 위한 유틸리티 클래스
+ * AWS SDK 없이 표준 라이브러리만 사용하여 S3 API를 직접 구현
+ */
+public class S3Utils {
+    private static final int MAX_ERROR_RESPONSE_SIZE = 1000;
+    private static final String AWS_S3_ENDPOINT_TEMPLATE = "https://%s.s3.%s.amazonaws.com/%s";
+    private static final String AWS_ALGORITHM = "AWS4-HMAC-SHA256";
+    private static final String AWS_REQUEST = "aws4_request";
+    private static final String AWS_SERVICE = "s3";
+    private static final int DEFAULT_BUFFER_SIZE = 8192;
+    private static final int HTTP_SUCCESS_MIN = 200;
+    private static final int HTTP_SUCCESS_MAX = 299;
+    
+    private final S3BackupConfig config;
+    
+    /**
+     * S3Utils 인스턴스 생성
+     * @param config S3 백업 설정
+     */
+    public S3Utils(S3BackupConfig config) {
+        this.config = config;
+    }
+    
+    /**
+     * S3에 파일을 업로드합니다.
+     * 
+     * @param file 업로드할 파일
+     * @param objectKey S3 객체 키
+     * @throws IOException 업로드 실패 시
+     */
+    public void uploadFile(File file, String objectKey) throws IOException {
+        if (!file.exists() || !file.isFile()) {
+            throw new FileNotFoundException("Backup file not found: " + file.getAbsolutePath());
+        }
+
+        String endpoint = String.format(AWS_S3_ENDPOINT_TEMPLATE, this.config.getBucket(), this.config.getRegion(), objectKey);
+        
+        URL url = new URL(endpoint);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        
+        try {
+            // 파일 해시 계산
+            String contentSha256 = CryptoUtils.calculateSha256(file);
+            
+            // HTTP 요청 설정
+            connection.setRequestMethod("PUT");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/octet-stream");
+            connection.setRequestProperty("Content-Length", String.valueOf(file.length()));
+            connection.setRequestProperty("x-amz-content-sha256", contentSha256);
+            
+            // AWS 서명 생성 및 설정
+            String timestamp = ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
+            String dateStamp = timestamp.substring(0, 8);
+            
+            Map<String, String> headers = new TreeMap<>();
+            headers.put("host", connection.getURL().getHost());
+            headers.put("x-amz-content-sha256", contentSha256);
+            headers.put("x-amz-date", timestamp);
+            
+            String authorization = createAuthorizationHeader(
+                "PUT", objectKey, headers, contentSha256, timestamp, dateStamp);
+            
+            connection.setRequestProperty("Authorization", authorization);
+            connection.setRequestProperty("x-amz-date", timestamp);
+            
+            // 파일 업로드
+            try (FileInputStream fis = new FileInputStream(file);
+                 OutputStream os = connection.getOutputStream();
+                 BufferedInputStream bis = new BufferedInputStream(fis);
+                 BufferedOutputStream bos = new BufferedOutputStream(os)) {
+                
+                byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
+                int bytesRead;
+                
+                while ((bytesRead = bis.read(buffer)) != -1) {
+                    bos.write(buffer, 0, bytesRead);
+                }
+                
+                bos.flush();
+            }
+            
+            // 응답 확인
+            int responseCode = connection.getResponseCode();
+            if (responseCode < HTTP_SUCCESS_MIN || responseCode > HTTP_SUCCESS_MAX) {
+                throw new IOException("S3 upload failed. Response code: " + responseCode +
+                    ", Error: " + readErrorResponse(connection));
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+    
+    /**
+     * AWS Signature Version 4 인증 헤더를 생성합니다.
+     */
+    private String createAuthorizationHeader(String method,
+            String objectKey, Map<String, String> headers, String payloadHash,
+            String timestamp, String dateStamp) throws IOException {
+        
+        try {
+            // 1. Canonical Request 생성
+            String canonicalRequest = createCanonicalRequest(method, "/" + objectKey, "", headers, payloadHash);
+            
+            // 2. String to Sign 생성
+            String credentialScope = dateStamp + "/" + this.config.getRegion() + "/" + AWS_SERVICE + "/" + AWS_REQUEST;
+            String stringToSign = AWS_ALGORITHM + "\n" + timestamp + "\n" + credentialScope + "\n" + 
+                CryptoUtils.calculateSha256(canonicalRequest);
+            
+            // 3. Signing Key 생성
+            byte[] signingKey = CryptoUtils.getAwsSignatureKey(this.config.getSecretKey(), dateStamp, this.config.getRegion(), AWS_SERVICE);
+            
+            // 4. Signature 계산
+            String signature = CryptoUtils.hmacSha256Hex(signingKey, stringToSign);
+            
+            // 5. Authorization 헤더 생성
+            return AWS_ALGORITHM + " " +
+                "Credential=" + this.config.getAccessKey() + "/" + credentialScope + ", " +
+                "SignedHeaders=" + String.join(";", headers.keySet()) + ", " +
+                "Signature=" + signature;
+                
+        } catch (Exception e) {
+            throw new IOException("Failed to create AWS authorization header", e);
+        }
+    }
+    
+    /**
+     * Canonical Request를 생성합니다.
+     */
+    private String createCanonicalRequest(String method, String uri, String queryString,
+            Map<String, String> headers, String payloadHash) {
+        
+        StringBuilder canonicalHeaders = new StringBuilder();
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            canonicalHeaders.append(entry.getKey().toLowerCase()).append(":")
+                .append(entry.getValue().trim()).append("\n");
+        }
+        
+        String signedHeaders = String.join(";", headers.keySet());
+        
+        return method + "\n" +
+            uri + "\n" +
+            queryString + "\n" +
+            canonicalHeaders + "\n" +
+            signedHeaders + "\n" +
+            payloadHash;
+    }
+
+    /**
+     * HTTP 에러 응답을 읽습니다.
+     */
+    private String readErrorResponse(HttpURLConnection connection) {
+        try (InputStream errorStream = connection.getErrorStream()) {
+            return HttpResponseReader.readResponse(errorStream, MAX_ERROR_RESPONSE_SIZE, "No error details available");
+        } catch (IOException e) {
+            return "Failed to read error response: " + e.getMessage();
+        }
+    }
+}
