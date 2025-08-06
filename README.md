@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.ckr3453:db-backup4j:v1.0.0'
+    implementation 'com.github.ckr3453:db-backup4j:v1.0.3'
 }
 ```
 
@@ -44,7 +44,7 @@ dependencies {
 <dependency>
     <groupId>com.github.ckr3453</groupId>
     <artifactId>db-backup4j</artifactId>
-    <version>v1.0.0</version>
+    <version>v1.0.3</version>
 </dependency>
 ```
 
@@ -322,7 +322,7 @@ schedule.cron=0 0 * * 1-5      # 평일 자정
 schedule.cron=0 0 1,15 * *     # 매월 1일과 15일 자정
 ```
 
-## 🔧 개발 환경 설정
+## 개발 환경 설정
 
 ### 요구사항
 - **Java**: JDK 8 이상
