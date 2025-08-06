@@ -1,6 +1,7 @@
 plugins {
     id 'java-library'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'maven-publish'
 }
 
 dependencies {
@@ -47,4 +48,42 @@ shadowJar {
 
 jar {
     enabled = false
+}
+
+publishing {
+    publications {
+        'db-backup4j-core'(MavenPublication) {
+            artifactId = 'db-backup4j-core'
+            
+            // shadowJar를 main artifact로 사용
+            artifact shadowJar
+            
+            pom {
+                name = 'DB Backup4J Core'
+                description = 'Configuration-driven database backup library for Java 8+'
+                url = 'https://github.com/ckr3453/db-backup4j'
+                
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                
+                developers {
+                    developer {
+                        id = 'ckr3453'
+                        name = 'Kyungrok Cho'
+                        email = 'ckr3453@gmail.com'
+                    }
+                }
+                
+                scm {
+                    connection = 'scm:git:git://github.com/ckr3453/db-backup4j.git'
+                    developerConnection = 'scm:git:ssh://github.com/ckr3453/db-backup4j.git'
+                    url = 'https://github.com/ckr3453/db-backup4j'
+                }
+            }
+        }
+    }
 }
